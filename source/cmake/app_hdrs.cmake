@@ -98,15 +98,8 @@ SET(APP_HDRS
     source/context/user_interface_module.h
     source/element/element_point_tool.h
     source/element/element_tool.h
-    source/element/element_point_viewer_wx.h
-    source/graphics/graphics_window.h
-    source/graphics/graphics_window_private.hpp
     source/graphics/texturemap.h
     source/graphics/transform_tool.h
-    source/dialog/tessellation_dialog.hpp
-    source/graphics/region_tree_viewer_wx.h
-    source/graphics/spectrum_editor_wx.h
-    source/graphics/spectrum_editor_dialog_wx.h
     source/graphics/material_app.h
     source/graphics/spectrum_app.h
     source/interaction/interactive_tool.h
@@ -115,14 +108,7 @@ SET(APP_HDRS
     source/region/cmiss_region_app.h
     source/node/node_tool.h
     source/three_d_drawing/window_system_extensions.h
-    source/colour/colour_editor_wx.hpp
-    source/comfile/comfile_window_wx.h
-    source/comfile/comfile_window_wx.hpp
-    source/command/command_window.h
-    source/material/material_editor_wx.h
-    source/node/node_viewer_wx.h
     source/time/time_keeper_app.hpp
-    source/transformation/transformation_editor_wx.hpp
     source/user_interface/confirmation.h
     source/user_interface/event_dispatcher.h
     source/user_interface/fd_io.h
@@ -130,5 +116,4 @@ SET(APP_HDRS
     source/user_interface/idle.h
     source/user_interface/process_list_or_write_command.hpp
     source/user_interface/user_interface.h
-    source/user_interface/user_interface_wx.hpp)
-
+)

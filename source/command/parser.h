@@ -1046,7 +1046,7 @@ int setEnum(struct Parse_state *state, void *enumValueAddressVoid,
 			{
 				display_message(INFORMATION_MESSAGE, " <");
 				bool first = true;
-				while (enumValueString = enumToString::toString(static_cast<enumType>(value)))
+				while ((enumValueString = enumToString::toString(static_cast<enumType>(value))) != nullptr)
 				{
 					if (first)
 					{

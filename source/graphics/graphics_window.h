@@ -19,9 +19,7 @@ interest and set scene_viewer values directly.
 #if !defined (GRAPHICS_WINDOW_H)
 #define GRAPHICS_WINDOW_H
 
-#if 1
 #include "configure/cmgui_configure.h"
-#endif /* defined (1) */
 #include "general/image_utilities.h"
 #include "general/list.h"
 #include "general/manager.h"
@@ -29,15 +27,6 @@ interest and set scene_viewer values directly.
 #include "graphics/scene_viewer.h"
 #include "interaction/interactive_tool.h"
 #include "user_interface/user_interface.h"
-
-/*
-Global constants
-----------------
-*/
-
-#if defined (WIN32_USER_INTERFACE) || defined (GTK_USER_INTERFACE) || defined (WX_USER_INTERFACE) || defined (CARBON_USER_INTERFACE)
-#define USE_CMGUI_GRAPHICS_WINDOW
-#endif /* defined (WIN32_USER_INTERFACE) || defined (GTK_USER_INTERFACE) || defined (WX_USER_INTERFACE) || defined (CARBON_USER_INTERFACE) */
 
 /*
 Global/Public types

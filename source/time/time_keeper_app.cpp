@@ -206,6 +206,9 @@ int Time_keeper_app::playPrivate()
 				looping =1;
 			}
 		} break;
+		case CMZN_TIMEKEEPER_PLAY_DIRECTION_INVALID:
+		{
+		} break;
 		}
 		cmgui_gettimeofday(&timeofday, (struct timezone *)NULL);
 		play_start_seconds = timeofday.tv_sec;
@@ -534,6 +537,9 @@ int Time_keeper_app::timerEvent()
 			{
 				play_remaining = 0;
 			}
+		} break;
+		case CMZN_TIMEKEEPER_PLAY_DIRECTION_INVALID:
+		{
 		} break;
 		}
 

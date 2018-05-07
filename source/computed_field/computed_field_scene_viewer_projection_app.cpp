@@ -147,8 +147,8 @@ already) and allows its contents to be modified.
 
 			option_table = CREATE(Option_table)();
 			Option_table_add_help(option_table,
-				"A 16 component computed field which continuously update the transformation between "
-				"'from' and 'to' graphics_coordinate systems in the give pane of window.");
+				"A 16 component computed field which continuously updates the transformation between "
+				"'from' and 'to' graphics_coordinate systems in the given pane of the window.");
 			/* pane_number */
 			Option_table_add_entry(option_table,"pane_number",&pane_number,
 				NULL,set_int_positive);

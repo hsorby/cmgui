@@ -3,14 +3,10 @@
 * This Source Code Form is subject to the terms of the Mozilla Public
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-/*******************************************************************************
-FILE : region_tree_viewer_wx.h
-
-LAST MODIFIED : 26 Febuary 2007
-
+/*
 DESCRIPTION :
 Widgets for editing scene, esp. changing visibility of members.
-==============================================================================*/
+*/
 
 #if !defined (REGION_TREE_VIEWER_WX_H)
 #define REGION_TREE_VIEWER_WX_H_WX_H
@@ -25,7 +21,7 @@ Global types
 ------------
 */
 
-struct Region_tree_viewer;
+//struct Region_tree_viewer;
 
 /*
 Global functions
@@ -42,7 +38,7 @@ struct Region_tree_viewer *CREATE(Region_tree_viewer)(
 	cmzn_glyphmodule *glyphmodule,
 	struct MANAGER(cmzn_spectrum) *spectrum_manager,
 	struct MANAGER(VT_volume_texture) *volume_texture_manager,
-	struct User_interface *user_interface);
+    struct User_interface *user_interface)
 /*******************************************************************************
 LAST MODIFIED : 24 November 2005
 

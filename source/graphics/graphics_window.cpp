@@ -1,8 +1,10 @@
-/*******************************************************************************
-FILE : graphics_window.cpp
-
-LAST MODIFIED : 9 May 2007
-
+/* OpenCMISS-Cmgui Application
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ */
+/*
 DESCRIPTION:
 Code for opening, closing and working a cmgui 3D display window.
 
@@ -10,16 +12,10 @@ Have get/set routines for parameters specific to window and/or which have
 widgets that are automatically updated if you set them. Use these functions
 if supplied, otherwise use Graphics_window_get_Scene_viewer() for the pane_no of
 interest and set scene_viewer values directly.
-==============================================================================*/
-/* OpenCMISS-Cmgui Application
-*
-* This Source Code Form is subject to the terms of the Mozilla Public
-* License, v. 2.0. If a copy of the MPL was not distributed with this
-* file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+*/
+
 #include <string>
-#if 1
 #include "configure/cmgui_configure.h"
-#endif /* defined (1) */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -41,14 +37,6 @@ interest and set scene_viewer values directly.
 #include "graphics/graphics.h"
 #include "graphics/graphics_window.h"
 #include "graphics/graphics_window_private.hpp"
-#if defined (WX_USER_INTERFACE)
-#include "wx/wx.h"
-#include <wx/tglbtn.h>
-#include <wx/splitter.h>
-#include "wx/xrc/xmlres.h"
-#include "choose/choose_manager_class.hpp"
-#include "graphics/graphics_window.xrch"
-#endif /* defined (WX_USER_INTERFACE)*/
 #include "graphics/light.hpp"
 #include "graphics/scene.h"
 #include "graphics/scene.hpp"
@@ -105,7 +93,7 @@ interest and set scene_viewer values directly.
 #include "graphics/light_app.h"
 #include "three_d_drawing/graphics_buffer_app.h"
 #include "graphics/scene_viewer_app.h"
-#include "region/cmiss_region_chooser_wx.hpp"
+//#include "region/cmiss_region_chooser_wx.hpp"
 /*
 Module constants
 ----------------
@@ -120,17 +108,12 @@ static const char *axis_name[7]={"??","x","y","z","-x","-y","-z"};
 Module types
 ------------
 */
-#if defined (WX_USER_INTERFACE)
-class wxGraphicsWindow;
-#endif /* defined (WX_USER_INTERFACE) */
 
 struct Graphics_window
-/*******************************************************************************
-LAST MODIFIED : 8 September 2000
-
+/**
 DESCRIPTION :
 Contains information for a graphics window.
-==============================================================================*/
+*/
 {
 	/* identifier for uniquely specifying window: */
 	const char *name;
@@ -142,31 +125,6 @@ Contains information for a graphics window.
 
 	struct Graphics_buffer_app_package *graphics_buffer_package;
 	cmzn_sceneviewermodule_id sceneviewermodule;
-#if defined (GTK_USER_INTERFACE)
-	GtkWidget *shell_window;
-#if GTK_MAJOR_VERSION >= 2
-	gulong close_handler_id;
-#endif /* GTK_MAJOR_VERSION >= 2 */
-#elif defined (WIN32_USER_INTERFACE)
-	HWND hWnd;
-#elif defined (WX_USER_INTERFACE)
-	double maximum_time, minimum_time, current_time;
-	wxBitmapButton *fast_backward, *backward_by_frame, *backward, *stop_button,
-		*forward, *forward_by_frame, *fast_forward, *hide_time_bitmapbutton;
-	wxBitmapButton *transform_tool_button, *node_tool_button, *data_tool_button,
-		*element_tool_button, *cad_tool_button, *element_point_tool_button;
-	wxButton *front_view_options;
-	wxCheckBox *wx_perspective_button, *time_play_every_frame_checkbox;
-	wxChoice *up_view_options;
-	wxFrame *GraphicsWindowTitle;
-	wxGraphicsWindow *wx_graphics_window;
-	wxGridSizer *grid_field;
-	wxPanel *panel, *panel2, *panel3, *panel4,*interactive_toolbar_panel, *time_editor_panel, *right_panel;
-	wxScrolledWindow  *left_panel, *ToolPanel;
-	wxSlider *time_slider;
-	wxTextCtrl *time_text_ctrl, *time_framerate_text_ctrl, *time_step_size_text_ctrl;
-	wxToggleButton *time_editor_togglebutton;
-#endif /* defined (GTK_USER_INTERFACE) */
 	/* scene_viewers and their parameters: */
 	enum Graphics_window_layout_mode layout_mode;
 	struct Scene_viewer_app **scene_viewer_array;
@@ -2077,9 +2035,11 @@ etc.) in all panes of the <window>.
 							if (filter)
 							{
 								cmzn_sceneviewer_set_scenefilter(sceneviewer, filter);
-								window->wx_graphics_window->
+#if defined (WX_USER_INTERFACE)
+                                window->wx_graphics_window->
 									graphics_window_set_filter_chooser_selected_item(filter);
-							}
+#endif
+                            }
 							cmzn_sceneviewer_end_change(sceneviewer);
 						}
 						if (scene)
@@ -3920,7 +3880,8 @@ Graphics_window_destroy_CB.
 			/* close the Scene_viewer(s) */
 			for (pane_no=0;pane_no<window->number_of_scene_viewers;pane_no++)
 			{
-				DESTROY(Scene_viewer)(&(window->scene_viewer_array[pane_no]));
+                //cmzn_sceneviewer_destroy(&(window->scene_viewer_array[pane_no]));
+                DESTROY(Scene_viewer_app)(&(window->scene_viewer_array[pane_no]));
 			}
 			DEALLOCATE(window->scene_viewer_array);
 		}
@@ -5577,10 +5538,10 @@ graphics window on screen.
 									"Graphics_window_get_frame_pixels. Cmgui-wx does not write"
 									"image with anti-aliasing under offscreen mode at the moment.");
 		#else
-		#if defined (OPENGL_API) && defined (USE_MSAA)
+            #if defined (OPENGL_API) && defined (USE_MSAA) && defined (WX_USER_INTERFACE)
 								multisample_framebuffer_flag =
 									Graphics_buffer_set_multisample_framebuffer(Graphics_buffer_app_get_core_buffer(current_buffer), antialias);
-		#endif
+            #endif
 		#endif
 							}
 						}
@@ -5921,7 +5882,7 @@ with commands for setting these.
 		else
 		{
 			/*???RC width_factor should be read in from defaults file */
-			const int width_factor = 1.05;
+            const double width_factor = 1.05;
 			/* enlarge radius to keep image within edge of window */
 			radius *= width_factor;
 		}

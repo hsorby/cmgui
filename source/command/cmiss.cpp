@@ -313,9 +313,6 @@ DESCRIPTION :
 #if defined (USE_PERL_INTERPRETER)
 	struct Interpreter *interpreter;
 #endif /* defined (USE_PERL_INTERPRETER) */
-#if defined (SELECT_DESCRIPTORS)
-	struct LIST(Io_device) *device_list;
-#endif /* defined (SELECT_DESCRIPTORS) */
 	/* list of glyphs = simple graphics objects with only geometry */
 	cmzn_glyphmodule_id glyphmodule;
 #if defined (WX_USER_INTERFACE)
@@ -4160,10 +4157,7 @@ Executes a GFX CREATE WINDOW command.
 							minimum_colour_buffer_depth, minimum_depth_buffer_depth,
 							minimum_accumulation_buffer_depth,
 							command_data->graphics_buffer_package,
-							&(command_data->background_colour),
-							command_data->lightmodule,command_data->default_light,
-							command_data->light_model_module,command_data->default_light_model,
-							command_data->scene_manager,command_data->default_scene,
+                            command_data->filter_module,command_data->default_scene,
 							command_data->interactive_tool_manager,
 							command_data->default_time_keeper_app,
 							command_data->user_interface, command_data->root_region,
@@ -16455,7 +16449,7 @@ Initialise all the subcomponents of cmgui and create the cmzn_command_data
 			Option_table_parse(option_table, state);
 			DESTROY(Option_table)(&option_table);
 			destroy_Parse_state(&state);
-			delete double_question_mark;
+			delete[] double_question_mark;
 		}
 
 		command_data->io_stream_package = cmzn_context_get_default_IO_stream_package(cmzn_context_app_get_core_context(context));
@@ -16648,11 +16642,6 @@ Initialise all the subcomponents of cmgui and create the cmzn_command_data
 
 		command_data->root_region = cmzn_context_get_default_region(cmzn_context_app_get_core_context(context));
 
-#if defined (SELECT_DESCRIPTORS)
-		/* create device list */
-		/*SAB.  Eventually want device manager */
-		command_data->device_list=CREATE(LIST(Io_device))();
-#endif /* defined (SELECT_DESCRIPTORS) */
 		/* global list of selected objects */
 		command_data->element_point_ranges_selection =
 			cmzn_context_get_element_point_ranges_selection(cmzn_context_app_get_core_context(context));

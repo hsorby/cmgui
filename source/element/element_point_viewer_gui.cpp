@@ -1,21 +1,9 @@
-/*******************************************************************************
-FILE : element_point_viewer_wx.cpp
-
-LAST MODIFIED : 6 June 2007
-
-DESCRIPTION :
-For wxWidgets only, Dialog for selecting an element point, viewing and editing its fields and
-applying changes. Works with Element_point_ranges_selection to display the last
-selected element point, or set it if entered in this dialog.
-==============================================================================*/
 /* OpenCMISS-Cmgui Application
 *
 * This Source Code Form is subject to the terms of the Mozilla Public
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-#if 1
 #include "configure/cmgui_configure.h"
-#endif
 #include "opencmiss/zinc/elementfieldtemplate.h"
 #include "opencmiss/zinc/fieldcache.h"
 #include "opencmiss/zinc/fieldmodule.h"
@@ -24,35 +12,29 @@ selected element point, or set it if entered in this dialog.
 #include "computed_field/computed_field_app.h"
 #include "computed_field/computed_field_finite_element.h"
 #include "computed_field/computed_field_value_index_ranges.h"
-#include "element/element_point_viewer_wx.h"
+
+#include "element/element_point_viewer_gui.h"
+
 #include "finite_element/finite_element_app.h"
 #include "finite_element/finite_element_discretization.h"
 #include "finite_element/finite_element_mesh.hpp"
 #include "finite_element/finite_element_region_private.h"
 #include "finite_element/finite_element_to_graphics_object.h"
+
 #include "general/debug.h"
 #include "general/message.h"
 #include "user_interface/user_interface.h"
 #include "command/parser.h"
 #include "graphics/auxiliary_graphics_types_app.h"
-#if defined (WX_USER_INTERFACE)
-#include <wx/collpane.h>
-#include "wx/wx.h"
-#include "wx/xrc/xmlres.h"
 #include "choose/choose_manager_class.hpp"
 #include "choose/choose_enumerator_class.hpp"
-#include "element/element_point_viewer_wx.xrch"
 #include "choose/text_choose_from_fe_element.hpp"
-#include "icon/cmiss_icon.xpm"
-#endif /*defined (WX_USER_INTERFACE)*/
 
 /*
 Module variables
 ----------------
 */
-#if defined (WX_USER_INTERFACE)
 class wxElementPointViewer;
-#endif /* defined (WX_USER_INTERFACE) */
 
 struct Element_point_viewer
 /*******************************************************************************

@@ -72,6 +72,7 @@ SET(APP_SRCS
     source/graphics/spectrum_app.cpp
     source/graphics/colour_app.cpp
     source/graphics/material_app.cpp
+    source/graphics/graphics_window.cpp
     source/region/cmiss_region_app.cpp
     source/graphics/scene_viewer_app.cpp
     source/cmgui.cpp
@@ -85,12 +86,7 @@ SET(APP_SRCS
     source/context/user_interface_module.cpp
     source/element/element_point_tool.cpp
     source/element/element_tool.cpp
-    source/element/element_point_viewer_wx.cpp
     source/graphics/transform_tool.cpp
-    source/dialog/tessellation_dialog.cpp
-    source/graphics/region_tree_viewer_wx.cpp
-    source/graphics/spectrum_editor_wx.cpp
-    source/graphics/spectrum_editor_dialog_wx.cpp
     source/interaction/interactive_tool.cpp
     source/io_devices/matrix.cpp
     source/node/node_tool.cpp
@@ -99,17 +95,9 @@ SET(APP_SRCS
     source/user_interface/event_dispatcher.cpp
     source/user_interface/filedir.cpp
     source/user_interface/user_interface.cpp
-    source/colour/colour_editor_wx.cpp
-    source/comfile/comfile_window_wx.cpp
-    source/command/command_window.cpp
     source/computed_field/computed_field_scene_viewer_projection_app.cpp
-    source/graphics/graphics_window.cpp
-    source/material/material_editor_wx.cpp
-    source/node/node_viewer_wx.cpp
-    source/region/cmiss_region_chooser_wx.cpp
     source/region/cmiss_region_app.cpp
     source/time/time_keeper_app.cpp
-    source/transformation/transformation_editor_wx.cpp
-    source/user_interface/idle.cpp)
-
+    source/user_interface/idle.cpp
+)
 
