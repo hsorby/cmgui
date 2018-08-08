@@ -87,7 +87,7 @@
 #include "element/element_operations.h"
 #include "element/element_point_tool.h"
 #if defined (WX_USER_INTERFACE)
-#include "element/element_point_viewer_wx.h"
+//#include "element/element_point_viewer_wx.h"
 #endif /* defined (WX_USER_INTERFACE) */
 #include "element/element_tool.h"
 #include "finite_element/export_cm_files.h"
@@ -138,8 +138,8 @@
 #endif /* switch(USER_INTERFACE)*/
 #include "graphics/spectrum.h"
 #if defined (WX_USER_INTERFACE)
-#include "graphics/spectrum_editor_wx.h"
-#include "graphics/spectrum_editor_dialog_wx.h"
+//#include "graphics/spectrum_editor_wx.h"
+//#include "graphics/spectrum_editor_dialog_wx.h"
 #endif /* defined (WX_USER_INTERFACE) */
 #include "graphics/spectrum_component.h"
 #include "graphics/texture.h"
@@ -175,9 +175,6 @@
 #include "minimise/minimise.h"
 #include "node/node_operations.h"
 #include "node/node_tool.h"
-#if defined (WX_USER_INTERFACE)
-#include "node/node_viewer_wx.h"
-#endif /* defined (WX_USER_INTERFACE) */
 #include "region/cmiss_region.h"
 #include "region/cmiss_region_app.h"
 #include "three_d_drawing/graphics_buffer.h"
