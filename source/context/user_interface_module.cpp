@@ -30,9 +30,6 @@
 #include "user_interface/event_dispatcher.h"
 #include "general/message.h"
 #include "context/user_interface_module.h"
-#if defined (USE_OPENCASCADE)
-#include "cad/cad_tool.h"
-#endif /* defined (USE_OPENCASCADE) */
 #include "context/context_app.h"
 #include "graphics/scene_viewer_app.h"
 

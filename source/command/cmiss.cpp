@@ -200,7 +200,6 @@
 #include "cad/geometricshape.h"
 #include "graphics/graphics_object.hpp"
 #include "cad/opencascadeimporter.h"
-#include "cad/cad_tool.h"
 #include "cad/computed_field_cad_topology.h"
 #endif /* defined (USE_OPENCASCADE) */
 
