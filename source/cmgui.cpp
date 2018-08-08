@@ -13,6 +13,13 @@ DESCRIPTION :
 /*SAB I have concatenated the correct version file for each version
   externally in the shell with cat #include "version.h"*/
 
+#include <QApplication>
+#include <QCommandLineParser>
+#include <QCommandLineOption>
+#include <QLabel>
+#include <QDebug>
+#include <QTextStream>
+
 #include "configure/cmgui_configure.h"
 #include "configure/cmgui_version.h"
 
@@ -20,22 +27,7 @@ DESCRIPTION :
 #include "command/cmiss.h"
 #include "context/context_app.h"
 #include "context/user_interface_module.h"
-#include "general/debug.h"
-#include "general/mystring.h"
-#include "general/message.h"
-
-#if defined (WX_USER_INTERFACE)
-# include "user_interface/user_interface_wx.hpp"
-# if defined (DARWIN)
-#  include <ApplicationServices/ApplicationServices.h>
-# endif
-#endif
-
-#if defined (WX_USER_INTERFACE)
-#include <wx/wx.h>
-#include <wx/apptrait.h>
-#include <wx/xrc/xmlres.h>
-#endif
+#include "user_interface/main_window.h"
 
 /*
 Global functions
@@ -43,16 +35,6 @@ Global functions
 */
 
 #if defined (WX_USER_INTERFACE)
-
-bool wxCmguiApp::OnInit()
-{
-	return (true);
-}
-
-wxAppTraits * wxCmguiApp::CreateTraits()
-{
-	return new wxGUIAppTraits;
-}
 
 void wxCmguiApp::OnIdle(wxIdleEvent& event)
 {
@@ -70,94 +52,137 @@ void wxCmguiApp::SetEventDispatcher(Event_dispatcher *event_dispatcher_in)
 	event_dispatcher = event_dispatcher_in;
 }
 
-BEGIN_EVENT_TABLE(wxCmguiApp, wxApp)
-	EVT_IDLE(wxCmguiApp::OnIdle)
-END_EVENT_TABLE()
-
-IMPLEMENT_APP_NO_MAIN(wxCmguiApp)
-
 #endif /*defined (WX_USER_INTERFACE)*/
 
-void ShortenPSN(int argc, char *argv[])
+const char applicationName[] = "Cmgui";
+
+enum CommandLineParseResult
 {
-	int arg_count = argc;
-	for(int i = 0; i < arg_count; i++)
-	{
-		if (strncmp(argv[i], "-psn", 4) == 0)
-		{
-			argv[i][4] = '\0';
-		}
-	}
+    CommandLineOk,
+    CommandLineError,
+    CommandLineVersionRequested,
+    CommandLineHelpRequested
+};
+
+CommandLineParseResult parseCommandLine(QCommandLineParser &parser, const QStringList &arguments, QString *errorMessage)
+{
+    QString applicationDescription;
+    QTextStream stream(&applicationDescription);
+    stream << applicationName << " version " << CMGUI_VERSION_STRING << endl;
+    stream << CMGUI_COPYRIGHT_STRING << endl;
+    stream << "Build information: " << CMGUI_BUILD_STRING << " " << CMGUI_REVISION_STRING;
+
+    parser.setApplicationDescription(applicationDescription);
+    parser.setSingleDashWordOptionMode(QCommandLineParser::ParseAsLongOptions);
+    const QCommandLineOption helpOption = parser.addHelpOption();
+    const QCommandLineOption versionOption = parser.addVersionOption();
+
+    if (!parser.parse(arguments)) {
+        *errorMessage = parser.errorText();
+        return CommandLineError;
+    }
+
+    if (parser.isSet(versionOption))
+        return CommandLineVersionRequested;
+
+    if (parser.isSet(helpOption))
+        return CommandLineHelpRequested;
+
+    return CommandLineOk;
+}
+
+QCoreApplication* createApplication(int &argc, char *argv[], CommandLineParseResult &status)
+{
+    QStringList arguments;
+    for (int a = 0; a < argc; ++a) {
+        arguments << QString::fromLocal8Bit(argv[a]);
+    }
+
+    QCommandLineParser parser;
+    // A boolean option for running Cmgui sans GUI (--sans-gui)
+    const QCommandLineOption sansGuiOption(QStringList() << "s" << "sans-gui", "Run Cmgui sans GUI.");
+    parser.addOption(sansGuiOption);
+
+    QString errorMessage;
+    status = parseCommandLine(parser, arguments, &errorMessage);
+
+
+    QCoreApplication *activeApplication;
+
+    switch (status) {
+    case CommandLineError:
+    case CommandLineHelpRequested:
+    case CommandLineVersionRequested:
+        activeApplication = new QCoreApplication(argc, argv);
+        break;
+    default:
+        if (parser.isSet(sansGuiOption)) {
+            activeApplication = new QCoreApplication(argc, argv);
+        } else {
+            QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+            activeApplication = new QApplication(argc, argv);
+        }
+    }
+
+    QCoreApplication::setOrganizationName("UoA");
+    QCoreApplication::setApplicationName(applicationName);
+    QCoreApplication::setApplicationVersion(CMGUI_VERSION_STRING);
+
+    switch (status) {
+    case CommandLineOk:
+        break;
+    case CommandLineError:
+        qCritical() << errorMessage;
+        qInfo().noquote() << parser.helpText();
+    case CommandLineHelpRequested:
+        qInfo().noquote() << parser.helpText();
+    case CommandLineVersionRequested:
+        qInfo().noquote() << parser.applicationDescription();
+    }
+
+    return activeApplication;
 }
 
 /**
  * Main program for the CMISS Graphical User Interface CMGUI
  */
-#if !defined (WIN32_USER_INTERFACE) && !defined (_MSC_VER)
 int main(int argc, char *argv[])
-#else /* !defined (WIN32_USER_INTERFACE)  && !defined (_MSC_VER)*/
-int WINAPI WinMain(HINSTANCE current_instance,HINSTANCE previous_instance,
-	LPSTR command_line,int initial_main_window_state)
-	/* using WinMain as the entry point tells Windows that it is a gui and to use
-		the graphics device interface functions for I/O */
-	/*???DB.  WINDOWS a zero return code if WinMain does get into the message
-		loop.  Other application interfaces may expect something else.  Should this
-		failure code be #define'd ? */
-	/*???DB. Win32 SDK says that don't have to call it WinMain */
-#endif /* !defined (WIN32_USER_INTERFACE)  && !defined (_MSC_VER)*/
 {
-	int return_code = 0;
-	struct cmzn_context_app *context = NULL;
+    CommandLineParseResult status = CommandLineOk;
+    QScopedPointer<QCoreApplication> application(createApplication(argc, argv, status));
+    QScopedPointer<MainWindow> mainWindow(nullptr);
+    if (qobject_cast<QApplication *>(application.data())) {
+       mainWindow.reset(new MainWindow());
+       mainWindow->show();
+    } else {
+        switch (status) {
+        case CommandLineOk:
+            qDebug() << "Run application without GUI.";
+            break;
+        case CommandLineError:
+            return 3;
+        case CommandLineHelpRequested:
+        case CommandLineVersionRequested:
+            return 0;
+        }
+    }
+
+    return application->exec();
+
+#ifdef andrew
+
+    int return_code = 0;
+    struct cmzn_context_app *context = NULL;
 	struct User_interface_module *UI_module = NULL;
 	struct cmzn_command_data *command_data;
 
-#if !defined (WIN32_USER_INTERFACE) && !defined (_MSC_VER)
-	ENTER(main);
-#else /* !defined (WIN32_USER_INTERFACE)  && !defined (_MSC_VER)*/
-	ENTER(WinMain);
-
-	//_CrtSetBreakAlloc(28336);
-	int argc = 1;
-	char *p, *q;
-	for (p = command_line; p != NULL && *p != 0;)
-	{
-		p = strchr(p, ' ');
-		if (p != NULL)
-			p++;
-		argc++;
-	}
-	char **argv = 0;
-	ALLOCATE(argv, char *, argc);
-	argv[0] = duplicate_string("cmgui");
-	int i = 1;
-	for (p = command_line; p != NULL && *p != 0;)
-	{
-		q = strchr(p, ' ');
-		if (q != NULL)
-			*q++ = 0;
-		if (p != NULL)
-			argv[i++] = duplicate_string(p);
-		p = q;
-	}
-#endif /* !defined (WIN32_USER_INTERFACE)  && !defined (_MSC_VER)*/
-
-	set_display_message_on_console(true);
 	/* display the version */
 	display_message(INFORMATION_MESSAGE, "%s version %s %s\n%s\n"
 		"Build information: %s %s\n", CMGUI_NAME_STRING, CMGUI_VERSION_STRING,
 		CMGUI_DATETIME_STRING, CMGUI_COPYRIGHT_STRING, CMGUI_BUILD_STRING,
 		CMGUI_REVISION_STRING);
 
-#if defined (CARBON_USER_INTERFACE) || (defined (WX_USER_INTERFACE) && defined (DARWIN))
-	ShortenPSN(argc, argv);  // shorten the psn command line argument when launching from finder on os x to just -psn
-	ProcessSerialNumber PSN;
-	GetCurrentProcess(&PSN);
-	TransformProcessType(&PSN,kProcessTransformToForegroundApplication);
-#endif
 	context = cmzn_context_app_create("default");
-#if defined (WX_USER_INTERFACE)
-	int wx_entry_started = 0;
-#endif
 	if (context)
 	{
 #if defined (WX_USER_INTERFACE) || (!defined (WIN32_USER_INTERFACE) && !defined (_MSC_VER))
@@ -214,26 +239,12 @@ int WINAPI WinMain(HINSTANCE current_instance,HINSTANCE previous_instance,
 		}
 		cmzn_context_app_destroy(&context);
 		Context_internal_cleanup();
-#if defined (WX_USER_INTERFACE)
-		if (wx_entry_started)
-			wxEntryCleanup();
-#endif
 	}
 	else
 	{
 		return_code = 1;
 	}
-#if defined (WIN32_USER_INTERFACE) || defined (_MSC_VER)
-	if (argv)
-	{
-		for (int i = 0; i < argc; i++)
-		{
-			DEALLOCATE(argv[i]);
-		}
-		DEALLOCATE(argv);
-	}
-#endif
-	LEAVE;
 
 	return (return_code);
+#endif
 } /* main */

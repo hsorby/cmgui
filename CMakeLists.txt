@@ -51,13 +51,20 @@ set(ZINC_USE_STATIC TRUE)
 set(REQUIRE_INTERNAL_ZINC_INCLUDE_DIR TRUE)
 find_package(Zinc REQUIRED)
 find_package(cmiss_perl_interpreter ${CMISS_PERL_INTERPRETER_FIND_FLAG})
-find_package(Qt5 COMPONENTS Core Gui Widgets OpenGL REQUIRED)
+find_package(Qt5 COMPONENTS Core Gui Widgets OpenGL UiTools REQUIRED)
 find_package(Git QUIET)
 
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 QT5_WRAP_CPP(tst_hdr_moc source/element/element_point_viewer_gui.h)
 QT5_WRAP_UI(tst_form_hdr source/element/element_point_viewer.ui)
+
+add_subdirectory(source/graphics/qt)
+add_subdirectory(source/command/qt)
+
+
+set(QRC_RESOURCES source/user_interface/qt/ui_files.qrc)
 
 if (WIN32)
     set(WIN32_SYSTEM TRUE )
@@ -94,6 +101,7 @@ else ()
     set(CONFIGURE_BUILD_TYPE ${CMAKE_BUILD_TYPE})
 endif ()
 
+
 # Configure the CMake script that generates the version header file.
 set(CONFIGURE_VERSION_SCRIPT ${PROJECT_BINARY_DIR}/CMakeFiles/ConfigureVersion.cmake)
 configure_file(${PROJECT_SOURCE_DIR}/cmake/ConfigureVersion.in.cmake ${CONFIGURE_VERSION_SCRIPT} @ONLY)
@@ -113,11 +121,11 @@ set(CMGUI_CONFIGURE_HDR ${PROJECT_BINARY_DIR}/source/configure/cmgui_configure.h
 configure_file(${PROJECT_SOURCE_DIR}/source/configure/cmgui_configure.h.cmake ${CMGUI_CONFIGURE_HDR})
 
 set(CMGUI_TARGET cmgui)
-add_executable(${CMGUI_TARGET} WIN32 MACOSX_BUNDLE ${APP_SRCS} ${APP_HDRS} ${CMGUI_CONFIGURE_HDR} ${CMGUI_VERSION_HDR} ${OSX_ICON} ${tst_hdr_moc} ${tst_form_hdr})
+add_executable(${CMGUI_TARGET} WIN32 MACOSX_BUNDLE ${APP_SRCS} ${APP_HDRS} ${CMGUI_CONFIGURE_HDR} ${CMGUI_VERSION_HDR} ${OSX_ICON} ${tst_hdr_moc} ${tst_form_hdr} ${QRC_RESOURCES})
 add_dependencies(${CMGUI_TARGET} generate_version_file)
 
 set_target_properties(${CMGUI_TARGET} PROPERTIES DEBUG_POSTFIX "d")
-target_link_libraries(${CMGUI_TARGET} PRIVATE zinc-static ${CMISS_PERL_INTERPRETER_LIBRARIES} Qt5::Widgets)
+target_link_libraries(${CMGUI_TARGET} PRIVATE graphics_qt command_qt zinc-static ${CMISS_PERL_INTERPRETER_LIBRARIES} Qt5::Widgets Qt5::UiTools)
 target_include_directories(${CMGUI_TARGET} PRIVATE "${PROJECT_SOURCE_DIR}/source" "${PROJECT_BINARY_DIR}/source" ${CMISS_PERL_INTERPRETER_INCLUDE_DIRS})
 target_compile_definitions(${CMGUI_TARGET} PRIVATE USE_CMGUI_GRAPHICS_WINDOW ${DEFINITIONS_FOR_PERL_INTERPRETER})
 

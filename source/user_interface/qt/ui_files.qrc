@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="mainwindowwidget">main_window_widget.ui</file>
+    </qresource>
+    <qresource prefix="/images">
+        <file>open.png</file>
+    </qresource>
+</RCC>

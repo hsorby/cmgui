@@ -94,7 +94,9 @@ SET(APP_SRCS
     source/user_interface/confirmation.cpp
     source/user_interface/event_dispatcher.cpp
     source/user_interface/filedir.cpp
+    source/user_interface/main_window.cpp
     source/user_interface/user_interface.cpp
+    source/utilities/qt_ui.cpp
     source/computed_field/computed_field_scene_viewer_projection_app.cpp
     source/region/cmiss_region_app.cpp
     source/time/time_keeper_app.cpp
