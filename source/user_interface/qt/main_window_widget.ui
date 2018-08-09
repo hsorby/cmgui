@@ -19,17 +19,10 @@
      <property name="orientation">
       <enum>Qt::Vertical</enum>
      </property>
-     <widget class="QWidget" name="">
+     <widget class="QWidget" name="layoutWidget">
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
-        <widget class="QPlainTextEdit" name="previousCommands_plainTextEdit">
-         <property name="undoRedoEnabled">
-          <bool>false</bool>
-         </property>
-         <property name="readOnly">
-          <bool>true</bool>
-         </property>
-        </widget>
+        <widget class="QListWidget" name="history_listWidget"/>
        </item>
        <item>
         <widget class="QLineEdit" name="command_lineEdit"/>
@@ -48,6 +41,11 @@
    </item>
   </layout>
  </widget>
+ <tabstops>
+  <tabstop>command_lineEdit</tabstop>
+  <tabstop>history_listWidget</tabstop>
+  <tabstop>screen_plainTextEdit</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

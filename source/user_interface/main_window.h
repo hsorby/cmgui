@@ -6,7 +6,9 @@
 #include "command/qt/command_file_viewer_codes.h"
 
 class QAction;
-class AppWindow;
+class QMenu;
+class QLineEdit;
+class QListWidget;
 class CommandFileViewerDialog;
 
 class MainWindow : public QMainWindow
@@ -58,6 +60,8 @@ private slots:
     void executeCommandsFromCommandFileViewerDialog(CommandFileViewerCodes commandCode);
     void deleteCommandFileViewerDialog();
 
+    void commandTextEntered();
+
     void showWindow();
 
 private:
@@ -81,9 +85,11 @@ private:
     QAction *recentFileSeparator;
     QAction *recentFileSubMenuAct;
 
+    QLineEdit *commandLineEdit;
+    QListWidget *historyListWidget;
+
     QMenu *windowMenu;
 
-    QList<AppWindow *> appWindows;
     CommandFileViewerDialog *commandFileViewerDialog;
 
 };

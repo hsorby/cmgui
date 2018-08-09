@@ -33,11 +33,9 @@ void CommandFileViewerDialog::readFile(const QString &fileName)
         return;
     }
 
-    QPlainTextEdit *ui_textEdit = findChild<QPlainTextEdit*>("contents_plainTextEdit");
-
     QTextStream in(&file);
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    ui_textEdit->setPlainText(in.readAll());
+    ui->contents_plainTextEdit->setPlainText(in.readAll());
     QApplication::restoreOverrideCursor();
 }
 

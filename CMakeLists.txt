@@ -57,9 +57,6 @@ find_package(Git QUIET)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-QT5_WRAP_CPP(tst_hdr_moc source/element/element_point_viewer_gui.h)
-QT5_WRAP_UI(tst_form_hdr source/element/element_point_viewer.ui)
-
 add_subdirectory(source)
 
 set(QRC_RESOURCES source/user_interface/qt/ui_files.qrc)

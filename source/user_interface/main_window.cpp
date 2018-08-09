@@ -52,6 +52,13 @@ void MainWindow::deleteCommandFileViewerDialog()
     commandFileViewerDialog = nullptr;
 }
 
+void MainWindow::commandTextEntered()
+{
+    QString command = commandLineEdit->text();
+    historyListWidget->addItem(command);
+    commandLineEdit->clear();
+}
+
 void MainWindow::updateWindowsMenu()
 {
     windowMenu->clear();
@@ -151,6 +158,9 @@ void MainWindow::init()
     QWidget* centralWidget = loadUiFile(this, ":/mainwindowwidget");
     setCentralWidget(centralWidget);
 
+    commandLineEdit = findChild<QLineEdit*>("command_lineEdit");
+    historyListWidget = findChild<QListWidget*>("history_listWidget");
+
     createActions();
 
     createStatusBar();
@@ -164,6 +174,7 @@ void MainWindow::init()
 
 void MainWindow::makeConnections()
 {
+    connect(commandLineEdit, &QLineEdit::returnPressed, this, &MainWindow::commandTextEntered);
 
 }
 
