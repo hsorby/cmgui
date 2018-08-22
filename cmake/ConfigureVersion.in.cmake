@@ -24,5 +24,5 @@ endif()
 
 set(CMGUI_BUILD_INFORMATION @CMGUI_BUILD_INFORMATION@)
 
-configure_file("@PROJECT_SOURCE_DIR@/source/configure/cmgui_version.h.cmake"
+configure_file("@PROJECT_SOURCE_DIR@/src/configure/cmgui_version.h.cmake"
     "@CMGUI_VERSION_STAGING_HDR@" @ONLY)

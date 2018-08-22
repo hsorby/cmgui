@@ -3,7 +3,8 @@
 
 #include <QMainWindow>
 
-#include "command/qt/command_file_viewer_codes.h"
+#include "command/command_file_viewer_codes.h"
+#include "command/cmgui_command_model.h"
 
 class QAction;
 class QMenu;
@@ -11,12 +12,14 @@ class QLineEdit;
 class QListWidget;
 class CommandFileViewerDialog;
 
-class MainWindow : public QMainWindow
+class CmguiCommandWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    MainWindow();
+    CmguiCommandWindow();
+
+    void setModel(QSharedPointer<CmguiCommandModel> model);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -91,5 +94,7 @@ private:
     QMenu *windowMenu;
 
     CommandFileViewerDialog *commandFileViewerDialog;
+
+    QSharedPointer<CmguiCommandModel> model;
 
 };

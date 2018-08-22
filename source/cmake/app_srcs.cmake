@@ -75,7 +75,6 @@ SET(APP_SRCS
     source/graphics/graphics_window.cpp
     source/region/cmiss_region_app.cpp
     source/graphics/scene_viewer_app.cpp
-    source/cmgui.cpp
     source/comfile/comfile.cpp
     source/command/cmiss.cpp
     source/command/command.cpp
@@ -94,9 +93,8 @@ SET(APP_SRCS
     source/user_interface/confirmation.cpp
     source/user_interface/event_dispatcher.cpp
     source/user_interface/filedir.cpp
-    source/user_interface/main_window.cpp
     source/user_interface/user_interface.cpp
-    source/utilities/qt_ui.cpp
+#    source/utilities/qt_ui.cpp
     source/computed_field/computed_field_scene_viewer_projection_app.cpp
     source/region/cmiss_region_app.cpp
     source/time/time_keeper_app.cpp

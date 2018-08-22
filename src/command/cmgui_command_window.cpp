@@ -1,6 +1,6 @@
 
 
-#include "user_interface/main_window.h"
+#include "command/cmgui_command_window.h"
 
 #include <QtWidgets>
 
@@ -8,19 +8,25 @@
 #include "utilities/qt_metatypes.h"
 #include "configure/cmgui_version.h"
 
-#include "command/qt/command_file_viewer_dialog.h"
+#include "command/command_file_viewer_dialog.h"
 
 static inline QString recentFilesKey() { return QStringLiteral("recentFileList"); }
 static inline QString fileKey() { return QStringLiteral("file"); }
 
-MainWindow::MainWindow()
+CmguiCommandWindow::CmguiCommandWindow()
     : commandFileViewerDialog(nullptr)
+    , model(nullptr)
 {
     setWindowTitle("Command Window");
     init();
 }
 
-void MainWindow::open()
+void CmguiCommandWindow::setModel(QSharedPointer<CmguiCommandModel> model)
+{
+    this->model = model;
+}
+
+void CmguiCommandWindow::open()
 {
     const QString fileName = QFileDialog::getOpenFileName(this);
     if (!fileName.isEmpty()) {
@@ -28,38 +34,42 @@ void MainWindow::open()
     }
 }
 
-void MainWindow::openFile(const QString &fileName)
+void CmguiCommandWindow::openFile(const QString &fileName)
 {
-    MainWindow::prependToRecentFiles(fileName);
+    CmguiCommandWindow::prependToRecentFiles(fileName);
     if (commandFileViewerDialog == nullptr) {
         commandFileViewerDialog = new CommandFileViewerDialog(this);
     }
-    connect(commandFileViewerDialog, &CommandFileViewerDialog::executeCommands, this, &MainWindow::executeCommandsFromCommandFileViewerDialog);
-    connect(commandFileViewerDialog, &CommandFileViewerDialog::finished, this, &MainWindow::deleteCommandFileViewerDialog);
+    connect(commandFileViewerDialog, &CommandFileViewerDialog::executeCommands, this, &CmguiCommandWindow::executeCommandsFromCommandFileViewerDialog);
+    connect(commandFileViewerDialog, &CommandFileViewerDialog::finished, this, &CmguiCommandWindow::deleteCommandFileViewerDialog);
     commandFileViewerDialog->readFile(fileName);
     commandFileViewerDialog->show();
 }
 
-void MainWindow::executeCommandsFromCommandFileViewerDialog(CommandFileViewerCodes commandCode)
+void CmguiCommandWindow::executeCommandsFromCommandFileViewerDialog(CommandFileViewerCodes commandCode)
 {
     CommandFileViewerDialog *dlg = static_cast<CommandFileViewerDialog*>(sender());
     QStringList commands = dlg->getCommandStrings(commandCode);
     qDebug() << commands;
 }
 
-void MainWindow::deleteCommandFileViewerDialog()
+void CmguiCommandWindow::deleteCommandFileViewerDialog()
 {
     commandFileViewerDialog = nullptr;
 }
 
-void MainWindow::commandTextEntered()
+void CmguiCommandWindow::commandTextEntered()
 {
     QString command = commandLineEdit->text();
     historyListWidget->addItem(command);
-    commandLineEdit->clear();
+    if (model->executeCommandFromString(command)) {
+        commandLineEdit->clear();
+    } else {
+        qDebug() << "Command failed.";
+    }
 }
 
-void MainWindow::updateWindowsMenu()
+void CmguiCommandWindow::updateWindowsMenu()
 {
     windowMenu->clear();
     QAction *minimizeAction = new QAction(tr("Minimize"), this);
@@ -72,7 +82,7 @@ void MainWindow::updateWindowsMenu()
         QString windowTitle = widgetList.at(i)->windowTitle();
         if (windowTitle.length() > 0) {
             QAction *action = new QAction(widgetList.at(i)->windowTitle(), this);
-            connect(action, &QAction::triggered, this, &MainWindow::showWindow);
+            connect(action, &QAction::triggered, this, &CmguiCommandWindow::showWindow);
             QVariant v = qVariantFromValue(widgetList.at(i));
             action->setData(v);
             action->setCheckable(true);
@@ -82,7 +92,7 @@ void MainWindow::updateWindowsMenu()
     }
 }
 
-void MainWindow::showWindow()
+void CmguiCommandWindow::showWindow()
 {
     QAction *action = static_cast<QAction *>(sender());
     QVariant v = action->data();
@@ -92,57 +102,57 @@ void MainWindow::showWindow()
     widget->activateWindow();
 }
 
-void MainWindow::read(ReadFileTypes fileTypeEnum)
+void CmguiCommandWindow::read(ReadFileTypes fileTypeEnum)
 {
     qDebug() << fileTypeEnum;
 }
 
-void MainWindow::write(WriteFileTypes fileTypeEnum)
+void CmguiCommandWindow::write(WriteFileTypes fileTypeEnum)
 {
     qDebug() << fileTypeEnum;
 }
 
-void MainWindow::view3d()
+void CmguiCommandWindow::view3d()
 {
     qDebug() << "View 3D window.";
 }
 
-void MainWindow::viewNode()
+void CmguiCommandWindow::viewNode()
 {
     qDebug() << "View node window.";
 }
 
-void MainWindow::viewElement()
+void CmguiCommandWindow::viewElement()
 {
     qDebug() << "View element window.";
 }
 
-void MainWindow::viewData()
+void CmguiCommandWindow::viewData()
 {
     qDebug() << "View data window.";
 }
 
-void MainWindow::fontSettings()
+void CmguiCommandWindow::fontSettings()
 {
     qDebug() << "View font settings.";
 }
 
-void MainWindow::editorScene()
+void CmguiCommandWindow::editorScene()
 {
     qDebug() << "View scene editor.";
 }
 
-void MainWindow::editorSpectrum()
+void CmguiCommandWindow::editorSpectrum()
 {
     qDebug() << "View spectrum editor.";
 }
 
-void MainWindow::editorMaterial()
+void CmguiCommandWindow::editorMaterial()
 {
     qDebug() << "View material editor.";
 }
 
-void MainWindow::about()
+void CmguiCommandWindow::about()
 {
     QString heading;
     QTextStream stream(&heading);
@@ -152,7 +162,7 @@ void MainWindow::about()
     QMessageBox::about(this, tr("About Cmgui"), heading);
 }
 
-void MainWindow::init()
+void CmguiCommandWindow::init()
 {
     //setAttribute(Qt::WA_DeleteOnClose);
     QWidget* centralWidget = loadUiFile(this, ":/mainwindowwidget");
@@ -172,13 +182,13 @@ void MainWindow::init()
     setUnifiedTitleAndToolBarOnMac(true);
 }
 
-void MainWindow::makeConnections()
+void CmguiCommandWindow::makeConnections()
 {
-    connect(commandLineEdit, &QLineEdit::returnPressed, this, &MainWindow::commandTextEntered);
+    connect(commandLineEdit, &QLineEdit::returnPressed, this, &CmguiCommandWindow::commandTextEntered);
 
 }
 
-void MainWindow::createActions()
+void CmguiCommandWindow::createActions()
 {
     QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
 
@@ -186,7 +196,7 @@ void MainWindow::createActions()
     QAction *openAct = new QAction(openIcon, tr("&Open..."), this);
     openAct->setShortcuts(QKeySequence::Open);
     openAct->setStatusTip(tr("Open a Cmgui command file"));
-    connect(openAct, &QAction::triggered, this, &MainWindow::open);
+    connect(openAct, &QAction::triggered, this, &CmguiCommandWindow::open);
     fileMenu->addAction(openAct);
 
     QMenu *readFileMenu = fileMenu->addMenu(tr("Read..."));
@@ -224,17 +234,17 @@ void MainWindow::createActions()
     fileMenu->addSeparator();
 
     QMenu *recentMenu = fileMenu->addMenu(tr("Recent..."));
-    connect(recentMenu, &QMenu::aboutToShow, this, &MainWindow::updateRecentFileActions);
+    connect(recentMenu, &QMenu::aboutToShow, this, &CmguiCommandWindow::updateRecentFileActions);
     recentFileSubMenuAct = recentMenu->menuAction();
 
     for (int i = 0; i < MaxRecentFiles; ++i) {
-        recentFileActs[i] = recentMenu->addAction(QString(), this, &MainWindow::openRecentFile);
+        recentFileActs[i] = recentMenu->addAction(QString(), this, &CmguiCommandWindow::openRecentFile);
         recentFileActs[i]->setVisible(false);
     }
 
     recentFileSeparator = fileMenu->addSeparator();
 
-    setRecentFilesVisible(MainWindow::hasRecentFiles());
+    setRecentFilesVisible(CmguiCommandWindow::hasRecentFiles());
 
     const QIcon exitIcon = QIcon::fromTheme("application-exit");
     QAction *exitAct = fileMenu->addAction(exitIcon, tr("E&xit"), qApp, &QApplication::closeAllWindows);
@@ -244,57 +254,57 @@ void MainWindow::createActions()
     QMenu *modelMenu = menuBar()->addMenu(tr("&Model"));
     QAction *view3DAct = new QAction(tr("Create 3D Viewer"), this);
     view3DAct->setStatusTip(tr("Create 3D viewer window"));
-    connect(view3DAct, &QAction::triggered, this,  &MainWindow::view3d);
+    connect(view3DAct, &QAction::triggered, this,  &CmguiCommandWindow::view3d);
     modelMenu->addAction(view3DAct);
     QAction *nodeViewerAct = new QAction(tr("Show node viewer"), this);
     nodeViewerAct->setStatusTip(tr("Show node viewer"));
-    connect(nodeViewerAct, &QAction::triggered, this,  &MainWindow::viewNode);
+    connect(nodeViewerAct, &QAction::triggered, this,  &CmguiCommandWindow::viewNode);
     modelMenu->addAction(nodeViewerAct);
     QAction *elementViewerAct = new QAction(tr("Show element viewer"), this);
     elementViewerAct->setStatusTip(tr("Show element viewer"));
-    connect(elementViewerAct, &QAction::triggered, this,  &MainWindow::viewElement);
+    connect(elementViewerAct, &QAction::triggered, this,  &CmguiCommandWindow::viewElement);
     modelMenu->addAction(elementViewerAct);
     QAction *dataViewerAct = new QAction(tr("show data viewer"), this);
     dataViewerAct->setStatusTip(tr("Show data viewer"));
-    connect(dataViewerAct, &QAction::triggered, this,  &MainWindow::viewData);
+    connect(dataViewerAct, &QAction::triggered, this,  &CmguiCommandWindow::viewData);
     modelMenu->addAction(dataViewerAct);
 
     QMenu *fontMenu = menuBar()->addMenu(tr("&Font"));
     QAction *fontSettingsAct = new QAction(tr("Font settings"), this);
     fontSettingsAct->setStatusTip(tr("Adjust the font settings"));
-    connect(fontSettingsAct, &QAction::triggered, this, &MainWindow::fontSettings);
+    connect(fontSettingsAct, &QAction::triggered, this, &CmguiCommandWindow::fontSettings);
     fontMenu->addAction(fontSettingsAct);
 
     QMenu *editorMenu = menuBar()->addMenu(tr("&Editors"));
     QAction *sceneEditorAct = new QAction(tr("Scene editor"), this);
     sceneEditorAct->setStatusTip(tr("View the scene editor"));
-    connect(sceneEditorAct, &QAction::triggered, this, &MainWindow::editorScene);
+    connect(sceneEditorAct, &QAction::triggered, this, &CmguiCommandWindow::editorScene);
     editorMenu->addAction(sceneEditorAct);
     QAction *materialEditorAct = new QAction(tr("Material editor"), this);
     materialEditorAct->setStatusTip(tr("View the material editor"));
-    connect(materialEditorAct, &QAction::triggered, this, &MainWindow::editorMaterial);
+    connect(materialEditorAct, &QAction::triggered, this, &CmguiCommandWindow::editorMaterial);
     editorMenu->addAction(materialEditorAct);
     QAction *spectrumEditorAct = new QAction(tr("Spectrum editor"), this);
     spectrumEditorAct->setStatusTip(tr("View the spectrum editor"));
-    connect(spectrumEditorAct, &QAction::triggered, this, &MainWindow::editorSpectrum);
+    connect(spectrumEditorAct, &QAction::triggered, this, &CmguiCommandWindow::editorSpectrum);
     editorMenu->addAction(spectrumEditorAct);
 
     windowMenu = menuBar()->addMenu(tr("&Window"));
-    connect(windowMenu, &QMenu::aboutToShow, this, &MainWindow::updateWindowsMenu);
+    connect(windowMenu, &QMenu::aboutToShow, this, &CmguiCommandWindow::updateWindowsMenu);
     QAction *emptyAction = new QAction(tr("Empty"), this);
     windowMenu->addAction(emptyAction);
 
     QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
-    QAction *aboutAct = helpMenu->addAction(tr("&About"), this, &MainWindow::about);
+    QAction *aboutAct = helpMenu->addAction(tr("&About"), this, &CmguiCommandWindow::about);
     aboutAct->setStatusTip(tr("Show the application's About box"));
 }
 
-void MainWindow::createStatusBar()
+void CmguiCommandWindow::createStatusBar()
 {
     statusBar()->showMessage(tr("Ready"));
 }
 
-void MainWindow::setRecentFilesVisible(bool visible)
+void CmguiCommandWindow::setRecentFilesVisible(bool visible)
 {
     recentFileSubMenuAct->setVisible(visible);
     recentFileSeparator->setVisible(visible);
@@ -323,7 +333,7 @@ static void writeRecentFiles(const QStringList &files, QSettings &settings)
     settings.endArray();
 }
 
-bool MainWindow::hasRecentFiles()
+bool CmguiCommandWindow::hasRecentFiles()
 {
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     const int count = settings.beginReadArray(recentFilesKey());
@@ -331,7 +341,7 @@ bool MainWindow::hasRecentFiles()
     return count > 0;
 }
 
-void MainWindow::prependToRecentFiles(const QString &fileName)
+void CmguiCommandWindow::prependToRecentFiles(const QString &fileName)
 {
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
 
@@ -345,7 +355,7 @@ void MainWindow::prependToRecentFiles(const QString &fileName)
     setRecentFilesVisible(!recentFiles.isEmpty());
 }
 
-void MainWindow::updateRecentFileActions()
+void CmguiCommandWindow::updateRecentFileActions()
 {
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
 
@@ -353,7 +363,7 @@ void MainWindow::updateRecentFileActions()
     const int count = qMin(int(MaxRecentFiles), recentFiles.size());
     int i = 0;
     for ( ; i < count; ++i) {
-        const QString fileName = MainWindow::strippedName(recentFiles.at(i));
+        const QString fileName = CmguiCommandWindow::strippedName(recentFiles.at(i));
         recentFileActs[i]->setText(tr("&%1 %2").arg(i + 1).arg(fileName));
         recentFileActs[i]->setData(recentFiles.at(i));
         recentFileActs[i]->setVisible(true);
@@ -362,13 +372,13 @@ void MainWindow::updateRecentFileActions()
         recentFileActs[i]->setVisible(false);
 }
 
-void MainWindow::openRecentFile()
+void CmguiCommandWindow::openRecentFile()
 {
     if (const QAction *action = qobject_cast<const QAction *>(sender()))
         openFile(action->data().toString());
 }
 
-void MainWindow::readSettings()
+void CmguiCommandWindow::readSettings()
 {
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     const QByteArray geometry = settings.value("geometry", QByteArray()).toByteArray();
@@ -382,13 +392,13 @@ void MainWindow::readSettings()
     }
 }
 
-void MainWindow::writeSettings()
+void CmguiCommandWindow::writeSettings()
 {
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     settings.setValue("geometry", saveGeometry());
 }
 
-void MainWindow::closeEvent(QCloseEvent *event)
+void CmguiCommandWindow::closeEvent(QCloseEvent *event)
 {
     QMainWindow::closeEvent(event);
     if (maybeQuit()) {
@@ -399,7 +409,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 }
 
-bool MainWindow::maybeQuit()
+bool CmguiCommandWindow::maybeQuit()
 {
     return true;
     const QMessageBox::StandardButton ret
@@ -417,7 +427,7 @@ bool MainWindow::maybeQuit()
     return true;
 }
 
-QString MainWindow::strippedName(const QString &fullFileName)
+QString CmguiCommandWindow::strippedName(const QString &fullFileName)
 {
     return QFileInfo(fullFileName).fileName();
 }

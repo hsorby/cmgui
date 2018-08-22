@@ -17,22 +17,19 @@ A module for supporting command parsing.
 * This Source Code Form is subject to the terms of the Mozilla Public
 * License, v. 2.0. If a copy of the MPL was not distributed with this
 * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+#include "command/parser.h"
+
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
-#include "command/parser.h"
-#if 1
-#include "configure/cmgui_configure.h"
-#endif /* defined (1) */
-#include "general/debug.h"
-#include "general/mystring.h"
-#include "general/object.h"
-#include "general/indexed_list_private.h"
+
+#include <QSharedPointer>
+
+#include "general/list.h"
 #include "general/message.h"
-#include "user_interface/user_interface.h"
 
 /* size of blocks allocated onto option table - to reduce number of reallocs */
 #define OPTION_TABLE_ALLOCATE_SIZE 10
@@ -77,6 +74,12 @@ struct Assign_variable
 	int access_count;
 }; /* struct Assign_variable */
 
+struct AssignVariable
+{
+    QString name;
+    QString value;
+};
+
 /*
 Module variables
 ----------------
@@ -90,145 +93,46 @@ static float variable_float[MAX_VARIABLES];
 static int exclusive_option=0,multiple_options=0,usage_indentation_level=0,
 	usage_newline;
 
-DECLARE_LIST_TYPES(Assign_variable);
-FULL_DECLARE_INDEXED_LIST_TYPE(Assign_variable);
+typedef QSharedPointer< AssignVariable > AssignVariablePtr;
+static NamedList< AssignVariablePtr > assignVariableList;
 
-PROTOTYPE_OBJECT_FUNCTIONS(Assign_variable);
-PROTOTYPE_LIST_FUNCTIONS(Assign_variable);
-PROTOTYPE_FIND_BY_IDENTIFIER_IN_LIST_FUNCTION(Assign_variable,name,const char *);
+//DECLARE_LIST_TYPES(Assign_variable);
+//FULL_DECLARE_INDEXED_LIST_TYPE(Assign_variable);
 
-static struct LIST(Assign_variable) *assign_variable_list = NULL;
+//PROTOTYPE_OBJECT_FUNCTIONS(Assign_variable);
+//PROTOTYPE_LIST_FUNCTIONS(Assign_variable);
+//PROTOTYPE_FIND_BY_IDENTIFIER_IN_LIST_FUNCTION(Assign_variable,name,const char *);
 
 /*
 Module functions
 ----------------
 */
-static struct Assign_variable *CREATE(Assign_variable)(const char *name)
+static AssignVariablePtr create_Assign_variable(const char *name)
 /*******************************************************************************
 LAST MODIFIED : 10 March 2000
 
 DESCRIPTION :
 ==============================================================================*/
 {
-	struct Assign_variable *variable;
+    AssignVariablePtr variable(new AssignVariable);
 
 	if (name)
 	{
-		if (ALLOCATE(variable, struct Assign_variable, 1)
-			&& ALLOCATE(variable->name, char, strlen(name)+1))
-		{
-			strcpy(variable->name, name);
-			variable->value = (char *)NULL;
-			variable->access_count = 0;
-			/* Add into the global list */
-			if (!assign_variable_list)
-			{
-				assign_variable_list = CREATE_LIST(Assign_variable)();
-			}
-
-			if (!(ADD_OBJECT_TO_LIST(Assign_variable)(variable, assign_variable_list)))
-			{
-				display_message(ERROR_MESSAGE,
-					"CREATE(Assign_variable).  Unable to add variable to global list");
-			}
-		}
-		else
-		{
-			display_message(ERROR_MESSAGE,
-				"CREATE(Assign_variable).  Unable to allocate memory for assign_variable structure");
-			DEALLOCATE(variable);
-			variable = (struct Assign_variable *)NULL;
-		}
+        variable->name = QString(name);
+        assignVariableList.append(variable);
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
-			"CREATE(Assign_variable).  Invalid arguments");
-		variable = (struct Assign_variable *)NULL;
+        print_message(ERROR_MESSAGE,
+            "create_Assign_variable.  Invalid arguments");
+        variable.reset();
 	}
 
 
 	return(variable);
 }
 
-int DESTROY(Assign_variable)(struct Assign_variable **variable_address)
-/*******************************************************************************
-LAST MODIFIED : 10 March 2000
-
-DESCRIPTION :
-==============================================================================*/
-{
-	int return_code = 0;
-	struct Assign_variable *variable;
-
-	if (variable_address && (variable = *variable_address))
-	{
-		if (variable->access_count <= 1)
-		{
-			if (variable->access_count == 1)
-			{
-				if (assign_variable_list)
-				{
-					/* Check that it is only the global list and then remove */
-					if (IS_OBJECT_IN_LIST(Assign_variable)(variable,
-						assign_variable_list))
-					{
-						REMOVE_OBJECT_FROM_LIST(Assign_variable)(variable,
-							assign_variable_list);
-					}
-					else
-					{
-						display_message(ERROR_MESSAGE,
-							"DESTROY(Assign_variable).  Destroy called when access count == 1 and the variable isn't in the global list.");
-						*variable_address = (struct Assign_variable *)NULL;
-						return_code = 0;
-					}
-				}
-				else
-				{
-					display_message(ERROR_MESSAGE,
-						"DESTROY(Assign_variable).  Destroy called when access count == 1 and there isn't a global list.");
-					*variable_address = (struct Assign_variable *)NULL;
-					return_code = 0;
-				}
-			}
-			else
-			{
-				return_code = 1;
-			}
-			if (return_code)
-			{
-				if (variable->name)
-				{
-					DEALLOCATE(variable->name);
-				}
-				if (variable->value)
-				{
-					DEALLOCATE(variable->value);
-				}
-				DEALLOCATE(variable);
-				*variable_address = (struct Assign_variable *)NULL;
-			}
-		}
-		else
-		{
-			display_message(ERROR_MESSAGE,
-				"DESTROY(Assign_variable).  Destroy called when access count > 1.");
-			*variable_address = (struct Assign_variable *)NULL;
-			return_code = 0;
-		}
-	}
-	else
-	{
-		display_message(ERROR_MESSAGE,
-			"DESTROY(Assign_variable).  Invalid arguments.");
-		return_code = 0;
-	}
-
-	return (return_code);
-}
-
-static int Assign_variable_set_value(struct Assign_variable *variable, const char *value)
+static int Assign_variable_set_value(AssignVariablePtr variable, const char *value)
 /*******************************************************************************
 LAST MODIFIED : 10 March 2000
 
@@ -240,22 +144,11 @@ DESCRIPTION :
 
 	if (variable && value)
 	{
-		if (REALLOCATE(new_value, variable->value, char, strlen(value) + 1))
-		{
-			variable->value = new_value;
-			strcpy(variable->value, value);
-			return_code = 1;
-		}
-		else
-		{
-			display_message(ERROR_MESSAGE,
-				"Assign_variable_set_value.  Unable to allocate memory for assign_variable value");
-			return_code = 0;
-		}
+        variable->value = QString(value);
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+        print_message(ERROR_MESSAGE,
 			"Assign_variable_set_value.  Invalid arguments");
 		return_code = 0;
 	}
@@ -263,14 +156,8 @@ DESCRIPTION :
 	return(return_code);
 } /* Assign_variable_set_value */
 
-DECLARE_OBJECT_FUNCTIONS(Assign_variable)
-DECLARE_INDEXED_LIST_MODULE_FUNCTIONS(Assign_variable,name,const char *,strcmp)
-DECLARE_INDEXED_LIST_FUNCTIONS(Assign_variable)
-DECLARE_FIND_BY_IDENTIFIER_IN_INDEXED_LIST_FUNCTION(Assign_variable,name,const char *,
-	strcmp)
-
 static int execute_variable_command_operation(struct Parse_state *state,
-	void *operation_type_void,void *dummy_user_data)
+    void *operation_type_void,void * /* dummy_user_data */)
 /*******************************************************************************
 LAST MODIFIED : 21 June 1999
 
@@ -283,8 +170,6 @@ Executes a VARIABLE operation command.
 	float value;
 	int number,return_code;
 
-	ENTER(execute_variable_command_operation);
-	USE_PARAMETER(dummy_user_data);
 	if (state)
 	{
 		current_token=state->current_token;
@@ -331,7 +216,7 @@ Executes a VARIABLE operation command.
 									} break;
 									default:
 									{
-										display_message(ERROR_MESSAGE,
+                                        print_message(ERROR_MESSAGE,
 						"execute_variable_command_operation.  Unknown variable operation");
 										return_code=0;
 									} break;
@@ -339,7 +224,7 @@ Executes a VARIABLE operation command.
 							}
 							else
 							{
-								display_message(ERROR_MESSAGE,"Invalid variable value: %s",
+                                print_message(ERROR_MESSAGE,"Invalid variable value: %s",
 									current_token);
 								display_parse_state_location(state);
 								return_code=0;
@@ -347,14 +232,14 @@ Executes a VARIABLE operation command.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,"Missing variable value");
+                            print_message(ERROR_MESSAGE,"Missing variable value");
 							display_parse_state_location(state);
 							return_code=0;
 						}
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid variable number: %s",
+                        print_message(ERROR_MESSAGE,"Invalid variable number: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -362,37 +247,36 @@ Executes a VARIABLE operation command.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                    print_message(ERROR_MESSAGE,
 						"execute_variable_command_show.  Missing operation_type");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," VARIABLE_NUMBER SET_VALUE");
+                print_message(INFORMATION_MESSAGE," VARIABLE_NUMBER SET_VALUE");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing variable number");
+            print_message(ERROR_MESSAGE,"Missing variable number");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+        print_message(ERROR_MESSAGE,
 			"execute_variable_command_operation.  Missing state");
 		return_code=0;
 	}
-	LEAVE;
 
 	return (return_code);
 } /* execute_variable_command_operation */
 
 static int execute_variable_command_show(struct Parse_state *state,
-	void *dummy_to_be_modified,void *dummy_user_data)
+    void * /*dummy_to_be_modified */,void * /* dummy_user_data */)
 /*******************************************************************************
 LAST MODIFIED : 21 June 1999
 
@@ -403,9 +287,6 @@ Executes a VARIABLE SHOW command.
 	const char *current_token;
 	int number,return_code;
 
-	ENTER(execute_variable_command_show);
-	USE_PARAMETER(dummy_to_be_modified);
-	USE_PARAMETER(dummy_user_data);
 	if (state)
 	{
 		current_token=state->current_token;
@@ -417,13 +298,13 @@ Executes a VARIABLE SHOW command.
 				/* get number */
 				if (1==sscanf(current_token," %i",&number))
 				{
-					display_message(INFORMATION_MESSAGE,"Variable %i = %g\n",number,
+                     print_message(INFORMATION_MESSAGE,"Variable %i = %g\n",number,
 						variable_float[number]);
 					return_code=1;
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"Invalid variable number: %s",
+                     print_message(ERROR_MESSAGE,"Invalid variable number: %s",
 						current_token);
 					display_parse_state_location(state);
 					return_code=0;
@@ -431,24 +312,23 @@ Executes a VARIABLE SHOW command.
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," VARIABLE_NUMBER");
+                 print_message(INFORMATION_MESSAGE," VARIABLE_NUMBER");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing variable number");
+             print_message(ERROR_MESSAGE,"Missing variable number");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"execute_variable_command_show.  Missing state");
 		return_code=0;
 	}
-	LEAVE;
 
 	return (return_code);
 } /* execute_variable_command_show */
@@ -483,7 +363,6 @@ with the same text.
 		partial_match_count, return_code;
 	struct Modifier_entry *entry, *matching_entry, *sub_entry;
 
-	ENTER(process_option);
 	exclusive_option++;
 	if (state && (entry = modifier_table))
 	{
@@ -568,7 +447,7 @@ with the same text.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,"process_option.  Error parsing");
+                             print_message(ERROR_MESSAGE,"process_option.  Error parsing");
 							return_code = 0;
 						}
 					}
@@ -653,7 +532,7 @@ with the same text.
 				}
 				if (error_message)
 				{
-					display_message(ERROR_MESSAGE, error_message);
+                     print_message(ERROR_MESSAGE, error_message);
 					DEALLOCATE(error_message);
 					display_parse_state_location(state);
 				}
@@ -663,18 +542,18 @@ with the same text.
 				/* write help */
 				if (0==usage_indentation_level)
 				{
-					display_message(INFORMATION_MESSAGE,"Usage :");
+                     print_message(INFORMATION_MESSAGE,"Usage :");
 					token=state->tokens;
 					for (i=state->current_index;i>0;i--)
 					{
-						display_message(INFORMATION_MESSAGE," %s",*token);
+                         print_message(INFORMATION_MESSAGE," %s",*token);
 						token++;
 					}
-					display_message(INFORMATION_MESSAGE," %s",*token);
+                     print_message(INFORMATION_MESSAGE," %s",*token);
 				}
 				if (!((multiple_options>0)&&(exclusive_option>1)))
 				{
-					display_message(INFORMATION_MESSAGE,"\n");
+                     print_message(INFORMATION_MESSAGE,"\n");
 				}
 				usage_indentation_level += 2;
 				if (strcmp(PARSER_HELP_STRING,current_token)||(multiple_options>0))
@@ -693,23 +572,23 @@ with the same text.
 									{
 										if (first)
 										{
-											display_message(INFORMATION_MESSAGE,"\n%*s(%s",
+                                             print_message(INFORMATION_MESSAGE,"\n%*s(%s",
 												usage_indentation_level," ",entry->option);
 										}
 										else
 										{
-											display_message(INFORMATION_MESSAGE,"|%s",entry->option);
+                                             print_message(INFORMATION_MESSAGE,"|%s",entry->option);
 										}
 									}
 									else
 									{
-										display_message(INFORMATION_MESSAGE,"%*s<%s",
+                                         print_message(INFORMATION_MESSAGE,"%*s<%s",
 											usage_indentation_level," ",entry->option);
 									}
 								}
 								else
 								{
-									display_message(INFORMATION_MESSAGE,"%*s%s",
+                                     print_message(INFORMATION_MESSAGE,"%*s%s",
 										usage_indentation_level," ",entry->option);
 								}
 								usage_newline=1;
@@ -718,10 +597,10 @@ with the same text.
 								{
 									if (exclusive_option<=1)
 									{
-										display_message(INFORMATION_MESSAGE,">");
+                                         print_message(INFORMATION_MESSAGE,">");
 										if (usage_newline)
 										{
-											display_message(INFORMATION_MESSAGE,"\n");
+                                             print_message(INFORMATION_MESSAGE,"\n");
 											usage_newline=0;
 										}
 									}
@@ -730,14 +609,14 @@ with the same text.
 								{
 									if (usage_newline)
 									{
-										display_message(INFORMATION_MESSAGE,"\n");
+                                         print_message(INFORMATION_MESSAGE,"\n");
 										usage_newline=0;
 									}
 								}
 							}
 							else
 							{
-								display_message(ERROR_MESSAGE,
+                                 print_message(ERROR_MESSAGE,
 									"process_option.  Missing modifier: %s",entry->option);
 								display_parse_state_location(state);
 							}
@@ -746,11 +625,11 @@ with the same text.
 						{
 							/* assume that the user_data is another option table */
 							sub_entry=(struct Modifier_entry *)(entry->user_data);
-							display_message(INFORMATION_MESSAGE,"%*s",
+                             print_message(INFORMATION_MESSAGE,"%*s",
 								usage_indentation_level," ");
 							if (0<multiple_options)
 							{
-								display_message(INFORMATION_MESSAGE,"<");
+                                 print_message(INFORMATION_MESSAGE,"<");
 							}
 							number_of_sub_entries=0;
 							while (sub_entry->option)
@@ -760,15 +639,15 @@ with the same text.
 								{
 									if (1<number_of_sub_entries)
 									{
-										display_message(INFORMATION_MESSAGE,"|");
+                                         print_message(INFORMATION_MESSAGE,"|");
 									}
-									display_message(INFORMATION_MESSAGE,"%s",sub_entry->option);
+                                     print_message(INFORMATION_MESSAGE,"%s",sub_entry->option);
 									(sub_entry->modifier)(state,sub_entry->to_be_modified,
 										sub_entry->user_data);
 								}
 								else
 								{
-									display_message(ERROR_MESSAGE,
+                                     print_message(ERROR_MESSAGE,
 										"process_option.  Missing modifier: %s",sub_entry->option);
 									display_parse_state_location(state);
 								}
@@ -776,9 +655,9 @@ with the same text.
 							}
 							if (0<multiple_options)
 							{
-								display_message(INFORMATION_MESSAGE,">");
+                                 print_message(INFORMATION_MESSAGE,">");
 							}
-							display_message(INFORMATION_MESSAGE,"\n");
+                             print_message(INFORMATION_MESSAGE,"\n");
 							usage_newline=0;
 						}
 						first=0;
@@ -793,23 +672,23 @@ with the same text.
 							{
 								if (first)
 								{
-									display_message(INFORMATION_MESSAGE,"\n%*s(",
+                                     print_message(INFORMATION_MESSAGE,"\n%*s(",
 										usage_indentation_level," ");
 								}
 								else
 								{
-									display_message(INFORMATION_MESSAGE,"|");
+                                     print_message(INFORMATION_MESSAGE,"|");
 								}
 							}
 							else
 							{
-								display_message(INFORMATION_MESSAGE,"%*s<",
+                                 print_message(INFORMATION_MESSAGE,"%*s<",
 									usage_indentation_level," ");
 							}
 						}
 						else
 						{
-							display_message(INFORMATION_MESSAGE,"%*s",usage_indentation_level,
+                             print_message(INFORMATION_MESSAGE,"%*s",usage_indentation_level,
 								" ");
 						}
 						usage_newline=1;
@@ -818,23 +697,23 @@ with the same text.
 						{
 							if (exclusive_option<=1)
 							{
-								display_message(INFORMATION_MESSAGE,">");
+                                 print_message(INFORMATION_MESSAGE,">");
 								if (usage_newline)
 								{
-									display_message(INFORMATION_MESSAGE,"\n");
+                                     print_message(INFORMATION_MESSAGE,"\n");
 									usage_newline=0;
 								}
 							}
 							else
 							{
-								display_message(INFORMATION_MESSAGE,")");
+                                 print_message(INFORMATION_MESSAGE,")");
 							}
 						}
 						else
 						{
 							if (usage_newline)
 							{
-								display_message(INFORMATION_MESSAGE,"\n");
+                                 print_message(INFORMATION_MESSAGE,"\n");
 								usage_newline=0;
 							}
 						}
@@ -851,12 +730,12 @@ with the same text.
 						{
 							if (multiple_options>0)
 							{
-								display_message(INFORMATION_MESSAGE,"%*s<%s>\n",
+                                 print_message(INFORMATION_MESSAGE,"%*s<%s>\n",
 									usage_indentation_level," ",entry->option);
 							}
 							else
 							{
-								display_message(INFORMATION_MESSAGE,"%*s%s\n",
+                                 print_message(INFORMATION_MESSAGE,"%*s%s\n",
 									usage_indentation_level," ",entry->option);
 							}
 						}
@@ -868,29 +747,29 @@ with the same text.
 							{
 								if (multiple_options>0)
 								{
-									display_message(INFORMATION_MESSAGE,"%*s<%s",
+                                     print_message(INFORMATION_MESSAGE,"%*s<%s",
 										usage_indentation_level," ",sub_entry->option);
 								}
 								else
 								{
-									display_message(INFORMATION_MESSAGE,"%*s(%s",
+                                     print_message(INFORMATION_MESSAGE,"%*s(%s",
 										usage_indentation_level," ",sub_entry->option);
 								}
 								sub_entry++;
 								while (sub_entry->option)
 								{
-									display_message(INFORMATION_MESSAGE,"|%s",sub_entry->option);
+                                     print_message(INFORMATION_MESSAGE,"|%s",sub_entry->option);
 									sub_entry++;
 								}
 								if (multiple_options>0)
 								{
-									display_message(INFORMATION_MESSAGE,">");
+                                     print_message(INFORMATION_MESSAGE,">");
 								}
 								else
 								{
-									display_message(INFORMATION_MESSAGE,")");
+                                     print_message(INFORMATION_MESSAGE,")");
 								}
-								display_message(INFORMATION_MESSAGE,"\n");
+                                 print_message(INFORMATION_MESSAGE,"\n");
 								usage_newline=0;
 							}
 						}
@@ -901,20 +780,20 @@ with the same text.
 					{
 						if (multiple_options>0)
 						{
-							display_message(INFORMATION_MESSAGE,"%*s<",
+                             print_message(INFORMATION_MESSAGE,"%*s<",
 								usage_indentation_level," ");
 						}
 						else
 						{
-							display_message(INFORMATION_MESSAGE,"%*s",usage_indentation_level,
+                             print_message(INFORMATION_MESSAGE,"%*s",usage_indentation_level,
 								" ");
 						}
 						(entry->modifier)(state,entry->to_be_modified,entry->user_data);
 						if (multiple_options>0)
 						{
-							display_message(INFORMATION_MESSAGE,">");
+                             print_message(INFORMATION_MESSAGE,">");
 						}
-						display_message(INFORMATION_MESSAGE,"\n");
+                         print_message(INFORMATION_MESSAGE,"\n");
 					}
 				}
 				usage_indentation_level -= 2;
@@ -924,18 +803,17 @@ with the same text.
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing token");
+             print_message(ERROR_MESSAGE,"Missing token");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"process_option.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"process_option.  Invalid argument(s)");
 		return_code=0;
 	}
 	exclusive_option--;
-	LEAVE;
 
 	return (return_code);
 } /* process_option */
@@ -950,7 +828,6 @@ DESCRIPTION :
 {
 	int local_exclusive_option,return_code;
 
-	ENTER(process_multiple_options);
 	if (state&&modifier_table)
 	{
 		multiple_options++;
@@ -964,7 +841,7 @@ DESCRIPTION :
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"process_multiple_options.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -973,7 +850,7 @@ DESCRIPTION :
 	return (return_code);
 } /* process_multiple_options */
 
-struct Option_table *CREATE(Option_table)(void)
+struct Option_table *create_Option_table(void)
 /*******************************************************************************
 LAST MODIFIED : 23 December 1999
 
@@ -983,7 +860,6 @@ Creates an Option_table for text parsing.
 {
 	struct Option_table *option_table;
 
-	ENTER(CREATE(Option_table));
 	if (ALLOCATE(option_table,struct Option_table,1))
 	{
 		option_table->allocated_entries = 0;
@@ -998,18 +874,13 @@ Creates an Option_table for text parsing.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"CREATE(Option_table).  Not enough memory");
-		if (option_table)
-		{
-			DEALLOCATE(option_table);
-		}
+         print_message(ERROR_MESSAGE,"CREATE(Option_table).  Not enough memory");
 	}
-	LEAVE;
 
 	return (option_table);
 } /* CREATE(Option_table) */
 
-int DESTROY(Option_table)(struct Option_table **option_table_address)
+int destroy_Option_table(struct Option_table **option_table_address)
 /*******************************************************************************
 LAST MODIFIED : 23 December 1999
 
@@ -1019,7 +890,6 @@ DESCRIPTION :
 	int i,return_code;
 	struct Option_table *option_table;
 
-	ENTER(DESTROY(Option_table));
 	if (option_table_address)
 	{
 		return_code=1;
@@ -1048,10 +918,9 @@ DESCRIPTION :
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"DESTROY(Option_table).  Invalid argument");
+         print_message(ERROR_MESSAGE,"DESTROY(Option_table).  Invalid argument");
 		return_code=0;
 	}
-	LEAVE;
 
 	return (return_code);
 } /* DESTROY(Option_table) */
@@ -1069,7 +938,6 @@ If fails, marks the option_table as invalid.
 	int i, return_code;
 	struct Modifier_entry *temp_entry;
 
-	ENTER(Option_table_add_entry_private);
 	if (option_table)
 	{
 		return_code=1;
@@ -1081,7 +949,7 @@ If fails, marks the option_table as invalid.
 				if (option_table->entry[i].option
 					&& (!strcmp(token, option_table->entry[i].option)))
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"Option_table_add_entry_private.  Token '%s' already in option table",
 						token);
 					return_code=0;
@@ -1099,7 +967,7 @@ If fails, marks the option_table as invalid.
 			}
 			else
 			{
-				display_message(ERROR_MESSAGE,
+                 print_message(ERROR_MESSAGE,
 					"Option_table_add_entry_private.  Not enough memory");
 				return_code=0;
 				option_table->valid=0;
@@ -1117,11 +985,10 @@ If fails, marks the option_table as invalid.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_entry_private.  Invalid argument(s)");
 		return_code=0;
 	}
-	LEAVE;
 
 	return (return_code);
 } /* Option_table_add_entry_private */
@@ -1147,7 +1014,7 @@ Adds the given help to the option table.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_help.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -1174,13 +1041,13 @@ If fails, marks the option_table as invalid.
 		if (!(return_code=Option_table_add_entry_private(option_table,token,
 			to_be_modified,user_data,modifier)))
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"Option_table_add_entry.  Could not add option");
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -1228,13 +1095,13 @@ of option_table!
 					(char *)NULL,(void *)NULL,suboption_table->entry,
 					(modifier_function)NULL)))
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"Option_table_add_entry.  Could not add option");
 				}
 			}
 			else
 			{
-				display_message(ERROR_MESSAGE,
+                 print_message(ERROR_MESSAGE,
 					"Option_table_add_suboption_table.  Not enough memory");
 				return_code=0;
 				option_table->valid=0;
@@ -1243,7 +1110,7 @@ of option_table!
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"Option_table_parse.  Invalid suboption_table");
 			option_table->valid=0;
 			DESTROY(Option_table)(&suboption_table);
@@ -1252,7 +1119,7 @@ of option_table!
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_suboption_table.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -1293,7 +1160,7 @@ The <on_string> and <off_string> should be static, eg. passed in quotes.
 			}
 			else
 			{
-				display_message(ERROR_MESSAGE,
+                 print_message(ERROR_MESSAGE,
 					"Option_table_add_switch.  Not enough memory");
 				return_code=0;
 				option_table->valid=0;
@@ -1307,7 +1174,7 @@ The <on_string> and <off_string> should be static, eg. passed in quotes.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_switch.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -1332,7 +1199,7 @@ DESCRIPTION :
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_is_valid.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -1358,7 +1225,7 @@ DESCRIPTION :
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_set_invalid.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -1396,13 +1263,13 @@ value.
 		{
 			if (*enumerator_string_address == enumerator_string_value)
 			{
-				display_message(INFORMATION_MESSAGE,"[%s]",enumerator_string_value);
+                 print_message(INFORMATION_MESSAGE,"[%s]",enumerator_string_value);
 			}
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"set_enumerator_string.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -1450,7 +1317,7 @@ no further errors will be reported on subsequent calls.
 			}
 			else
 			{
-				display_message(ERROR_MESSAGE,
+                 print_message(ERROR_MESSAGE,
 					"Option_table_add_enumerator.  Not enough memory");
 				return_code=0;
 				option_table->valid=0;
@@ -1464,7 +1331,7 @@ no further errors will be reported on subsequent calls.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_enumerator.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -1497,14 +1364,14 @@ entered.
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"Option_table_parse.  Invalid option table");
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"Option_table_parse.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"Option_table_parse.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -1561,7 +1428,7 @@ entered.
 						output = length - index;
 					}
 				}
-				display_message(INFORMATION_MESSAGE,"\n%*s*%*s%.*s",
+                 print_message(INFORMATION_MESSAGE,"\n%*s*%*s%.*s",
 					local_indent, " ", in_text_indent, " ",
 					output, option_table->help + index);
 				index += output;
@@ -1577,14 +1444,14 @@ entered.
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"Option_table_multi_parse.  Invalid option table");
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_multi_parse.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -1658,7 +1525,7 @@ as working space in which the token is constructed from the source string.
 						(';' != *source) && ('#' != *source))
 					{
 						/* string missing delimiter after quote; report error */
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"Token missing delimiter after final quote (%c)",quote_mark);
 						return_code=0;
 					}
@@ -1666,7 +1533,7 @@ as working space in which the token is constructed from the source string.
 				else
 				{
 					/* string ended without final quote; report error */
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"Token missing final quote (%c)",quote_mark);
 					return_code=0;
 				}
@@ -1696,7 +1563,7 @@ as working space in which the token is constructed from the source string.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"extract_token.  Not enough memory");
+                     print_message(ERROR_MESSAGE,"extract_token.  Not enough memory");
 					return_code=0;
 				}
 			}
@@ -1709,7 +1576,7 @@ as working space in which the token is constructed from the source string.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"extract_token.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"extract_token.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -1741,7 +1608,7 @@ NB
 	ENTER(create_Parse_state);
 	if (command_string)
 	{
-        if (ALLOCATE(state, struct Parse_state, 1))
+		if (ALLOCATE(state,struct Parse_state,1))
 		{
 			/*???RC trim_string not used as trailing whitespace may be in a quote */
 			if (ALLOCATE(working_string,char,strlen(command_string)+1))
@@ -1841,20 +1708,20 @@ NB
 			DEALLOCATE(working_string);
 			if (!return_code)
 			{
-				display_message(ERROR_MESSAGE,
+                 print_message(ERROR_MESSAGE,
 					"create_Parse_state.  Error filling parse state");
 				DEALLOCATE(state);
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"create_Parse_state.  Insufficient memory for parse state");
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"create_Parse_state.  Missing command string");
 		state=(struct Parse_state *)NULL;
 	}
@@ -1915,19 +1782,19 @@ Does not perform any parsing.
 			{
 				destroy_Parse_state(&state);
 				state = (struct Parse_state *)NULL;
-				display_message(ERROR_MESSAGE,
+                 print_message(ERROR_MESSAGE,
 					"create_Parse_state_from_tokens.  Error filling parse state");
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"create_Parse_state_from_tokens.  Insufficient memory for parse state");
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"create_Parse_state_from_tokens.  Missing tokens");
 		state = (struct Parse_state *)NULL;
 	}
@@ -1975,7 +1842,7 @@ DESCRIPTION :
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"destroy_Parse_state.  Invalid argument");
+         print_message(ERROR_MESSAGE,"destroy_Parse_state.  Invalid argument");
 		return_code=0;
 	}
 	LEAVE;
@@ -2021,7 +1888,7 @@ PARSER_HELP_STRING or PARSER_RECURSIVE_HELP_STRING.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Parse_state_help_mode.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -2057,7 +1924,7 @@ DESCRIPTION :
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"shift_Parse_state.  Cannot shift beyond end of token list");
 			state->current_token=(char *)NULL;
 			return_code=0;
@@ -2065,7 +1932,7 @@ DESCRIPTION :
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"shift_Parse_state.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"shift_Parse_state.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -2098,16 +1965,16 @@ Shows the current location in the parse <state>.
 		token=state->tokens;
 		while (i>0)
 		{
-			display_message(INFORMATION_MESSAGE,"%s ",*token);
+             print_message(INFORMATION_MESSAGE,"%s ",*token);
 			token++;
 			i--;
 		}
-		display_message(INFORMATION_MESSAGE,"*\n");
+         print_message(INFORMATION_MESSAGE,"*\n");
 		return_code=1;
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"display_parse_state_location.  Missing state");
 		return_code=0;
 	}
@@ -2141,7 +2008,7 @@ the <state>.  Useful for changing the kept history echoed to the command window.
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"Parse_state_append_to_command_string.  "
 				"Unable to reallocate command string");
 			return_code=0;
@@ -2149,7 +2016,7 @@ the <state>.  Useful for changing the kept history echoed to the command window.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Parse_state_append_to_command_string.  Invalid arguments");
 		return_code=0;
 	}
@@ -2230,7 +2097,7 @@ if it exists.
 							} break;
 							default:
 							{
-								display_message(ERROR_MESSAGE,
+                                 print_message(ERROR_MESSAGE,
 									"Variable format not known: %c : %s",begin[1],*token);
 								return_code=0;
 							} break;
@@ -2251,7 +2118,7 @@ if it exists.
 							}
 							else
 							{
-								display_message(ERROR_MESSAGE,
+                                 print_message(ERROR_MESSAGE,
 									"parse_variable.  Could not allocate new token");
 								return_code=0;
 							}
@@ -2259,20 +2126,20 @@ if it exists.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"Variable number out of range: %d : %s",number,*token);
 						return_code=0;
 					}
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"Variable number not found: %s",*token);
+                     print_message(ERROR_MESSAGE,"Variable number not found: %s",*token);
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(ERROR_MESSAGE,"Two percentage signs required: %s",
+                 print_message(ERROR_MESSAGE,"Two percentage signs required: %s",
 					*token);
 				return_code=0;
 			}
@@ -2332,7 +2199,7 @@ if it exists.
 								}
 								*index = 0;
 #if defined (DEBUG_CODE)
-								display_message(INFORMATION_MESSAGE,
+                                 print_message(INFORMATION_MESSAGE,
 									"parse_variable.\n\tOld token %s\n\tVariable value %s\n\tNew token %s\n", *token, variable->value, new_token);
 #endif /* defined (DEBUG_CODE) */
 								DEALLOCATE(*token);
@@ -2341,7 +2208,7 @@ if it exists.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,
+                             print_message(ERROR_MESSAGE,
 								"parse_variable.  Variable \"%s\" not found.", var_name);
 							return_code=0;
 						}
@@ -2349,21 +2216,21 @@ if it exists.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"parse_variable.  Unable to allocate variable name string");
 						return_code=0;
 					}
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"parse_variable.  Concatenation token operator \"//\" required between variable and plain text.");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(ERROR_MESSAGE,
+                 print_message(ERROR_MESSAGE,
 					"parse_variable.  Concatenation token operator \"//\" required between variable and plain text.");
 				return_code=0;
 			}
@@ -2371,7 +2238,7 @@ if it exists.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"parse_variable.  Missing token");
+         print_message(ERROR_MESSAGE,"parse_variable.  Missing token");
 		return_code=0;
 	}
 	LEAVE;
@@ -2419,7 +2286,7 @@ Executes a VARIABLE command.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"execute_variable_command.  Missing state");
 		return_code=0;
 	}
@@ -2463,7 +2330,7 @@ use of this command.
 				{
 					if (!(variable = CREATE(Assign_variable)(current_token)))
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"execute_assign_variable.  Unable to find or create variable %s",
 							current_token);
 						return_code = 0;
@@ -2490,7 +2357,7 @@ use of this command.
 										begin = begin2;
 										if (!(end = strchr(begin + 1,'"')))
 										{
-											display_message(ERROR_MESSAGE,
+                                             print_message(ERROR_MESSAGE,
 												"execute_assign_variable.  Closing \" missing.",
 												state->current_token);
 											return_code = 0;
@@ -2500,7 +2367,7 @@ use of this command.
 									{
 										if (!(end = strchr(begin + 1,')')))
 										{
-											display_message(ERROR_MESSAGE,
+                                             print_message(ERROR_MESSAGE,
 												"execute_assign_variable.  Closing ) missing.",
 												state->current_token);
 											return_code = 0;
@@ -2509,7 +2376,7 @@ use of this command.
 								}
 								else
 								{
-									display_message(ERROR_MESSAGE,
+                                     print_message(ERROR_MESSAGE,
 										"execute_assign_variable.  Bracket missing after funciton getenv",
 										state->current_token);
 									return_code = 0;
@@ -2529,7 +2396,7 @@ use of this command.
 										}
 										else
 										{
-											display_message(ERROR_MESSAGE,
+                                             print_message(ERROR_MESSAGE,
 												"execute_assign_variable.  Environment variable %s not found",
 												var_name);
 											return_code = 0;
@@ -2546,14 +2413,14 @@ use of this command.
 						}
 						else
 						{
-							display_message(INFORMATION_MESSAGE,
+                             print_message(INFORMATION_MESSAGE,
 								"\n           value");
 							return_code = 1;
 						}
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"execute_assign_variable.  Specify new value",
 							state->current_token);
 						return_code = 0;
@@ -2562,7 +2429,7 @@ use of this command.
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE,
+                 print_message(INFORMATION_MESSAGE,
 					"\n         VARIABLE_NAME value");
 				return_code = 1;
 			}
@@ -2574,7 +2441,7 @@ use of this command.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"execute_assign_variable.  Missing state");
 		return_code=0;
 	}
@@ -2646,14 +2513,14 @@ Allocates memory for a name, then copies the passed string into it.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"set_name.  Could not allocate memory for name");
 						return_code=0;
 					}
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"set_name.  Missing name_address");
+                     print_message(ERROR_MESSAGE,"set_name.  Missing name_address");
 					return_code=0;
 				}
 			}
@@ -2661,29 +2528,29 @@ Allocates memory for a name, then copies the passed string into it.
 			{
 				if (prefix_space)
 				{
-					display_message(INFORMATION_MESSAGE," NAME");
+                     print_message(INFORMATION_MESSAGE," NAME");
 				}
 				else
 				{
-					display_message(INFORMATION_MESSAGE,"NAME");
+                     print_message(INFORMATION_MESSAGE,"NAME");
 				}
 				if ((name_address=(char **)name_address_void)&&(*name_address))
 				{
-					display_message(INFORMATION_MESSAGE,"[%s]",*name_address);
+                     print_message(INFORMATION_MESSAGE,"[%s]",*name_address);
 				}
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing name");
+             print_message(ERROR_MESSAGE,"Missing name");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_name.  Missing state");
+         print_message(ERROR_MESSAGE,"set_name.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -2734,13 +2601,13 @@ or pointing to allocated strings.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,"set_names.  Not enough memory");
+                             print_message(ERROR_MESSAGE,"set_names.  Not enough memory");
 							return_code=0;
 						}
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Missing name");
+                         print_message(ERROR_MESSAGE,"Missing name");
 						display_parse_state_location(state);
 						return_code=0;
 					}
@@ -2751,40 +2618,40 @@ or pointing to allocated strings.
 				/* write help text */
 				for (i=0;i<number_of_names;i++)
 				{
-					display_message(INFORMATION_MESSAGE," NAME");
+                     print_message(INFORMATION_MESSAGE," NAME");
 				}
 				for (i=0;i<number_of_names;i++)
 				{
 					if (0==i)
 					{
-						display_message(INFORMATION_MESSAGE,"[",names[0]);
+                         print_message(INFORMATION_MESSAGE,"[",names[0]);
 					}
 					else
 					{
-						display_message(INFORMATION_MESSAGE," ",names[i]);
+                         print_message(INFORMATION_MESSAGE," ",names[i]);
 					}
 					if (names[i])
 					{
-						display_message(INFORMATION_MESSAGE,"%s",names[i]);
+                         print_message(INFORMATION_MESSAGE,"%s",names[i]);
 					}
 					else
 					{
-						display_message(INFORMATION_MESSAGE,"\"\"");
+                         print_message(INFORMATION_MESSAGE,"\"\"");
 					}
 				}
-				display_message(INFORMATION_MESSAGE,"]");
+                 print_message(INFORMATION_MESSAGE,"]");
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing %d names",number_of_names);
+             print_message(ERROR_MESSAGE,"Missing %d names",number_of_names);
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_names.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_names.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -2836,7 +2703,7 @@ all be initialised to zero).
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,"set_names_from_list.  "
+                             print_message(ERROR_MESSAGE,"set_names_from_list.  "
 								"Token \"%s\" repeated in list", data->tokens[i].string);
 							display_parse_state_location(state);
 							return_code = 0;
@@ -2846,14 +2713,14 @@ all be initialised to zero).
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," ");
+                 print_message(INFORMATION_MESSAGE," ");
 				for (i = 0 ; i < data->number_of_tokens ; i++)
 				{
 					if (i > 0)
 					{
-						display_message(INFORMATION_MESSAGE,"|");
+                         print_message(INFORMATION_MESSAGE,"|");
 					}
-					display_message(INFORMATION_MESSAGE,data->tokens[i].string);
+                     print_message(INFORMATION_MESSAGE,data->tokens[i].string);
 				}
 				valid_token = 0;
 			}
@@ -2861,7 +2728,7 @@ all be initialised to zero).
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_names_from_list.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_names_from_list.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -2905,38 +2772,38 @@ Parses a string from the parse <state> into <*string_address>. Outputs the
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"set_string.  Could not allocate memory for string");
 						return_code = 0;
 					}
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"set_string.  Missing string_address");
+                     print_message(ERROR_MESSAGE,"set_string.  Missing string_address");
 					return_code = 0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE, (const char *)string_description_void);
+                 print_message(INFORMATION_MESSAGE, (const char *)string_description_void);
 				if ((string_address = (char **)string_address_void) &&
 					(*string_address))
 				{
-					display_message(INFORMATION_MESSAGE, "[%s]", *string_address);
+                     print_message(INFORMATION_MESSAGE, "[%s]", *string_address);
 				}
 				return_code = 1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE, "Missing string");
+             print_message(ERROR_MESSAGE, "Missing string");
 			display_parse_state_location(state);
 			return_code = 0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE, "set_string.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE, "set_string.  Invalid argument(s)");
 		return_code = 0;
 	}
 	LEAVE;
@@ -2973,7 +2840,7 @@ int set_string_no_realloc(struct Parse_state *state,void *string_address_void,
 			{
 				if (*string_address)
 				{
-					display_message(ERROR_MESSAGE, "Already read %s as '%s'",
+                     print_message(ERROR_MESSAGE, "Already read %s as '%s'",
 						(const char *)string_description_void, *string_address);
 					display_parse_state_location(state);
 					return_code = 0;
@@ -2984,27 +2851,27 @@ int set_string_no_realloc(struct Parse_state *state,void *string_address_void,
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_string_no_realloc.  Could not allocate memory for string");
 					return_code = 0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE, (const char *)string_description_void);
+                 print_message(INFORMATION_MESSAGE, (const char *)string_description_void);
 				return_code = 1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE, "Missing string");
+             print_message(ERROR_MESSAGE, "Missing string");
 			display_parse_state_location(state);
 			return_code = 0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE, "set_string_no_realloc.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE, "set_string_no_realloc.  Invalid argument(s)");
 		return_code = 0;
 	}
 	LEAVE;
@@ -3044,39 +2911,39 @@ A modifier function for setting a int.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid integer: %s",current_token);
+                         print_message(ERROR_MESSAGE,"Invalid integer: %s",current_token);
 						display_parse_state_location(state);
 						return_code=0;
 					}
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"set_int.  Missing value_address");
+                     print_message(ERROR_MESSAGE,"set_int.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(int *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%d]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%d]",*value_address);
 				}
-				display_message(INFORMATION_MESSAGE,"{integer}");
+                 print_message(INFORMATION_MESSAGE,"{integer}");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing integer");
+             print_message(ERROR_MESSAGE,"Missing integer");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_int.  Missing state");
+         print_message(ERROR_MESSAGE,"set_int.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -3116,7 +2983,7 @@ In help mode writes the <description_string>.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE, "Invalid integer: %s",
+                         print_message(ERROR_MESSAGE, "Invalid integer: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code = 0;
@@ -3124,27 +2991,27 @@ In help mode writes the <description_string>.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_int_with_description.  Missing value_address");
 					return_code = 0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE, (char *)description_string_void);
+                 print_message(INFORMATION_MESSAGE, (char *)description_string_void);
 				return_code = 1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE, "Missing integer");
+             print_message(ERROR_MESSAGE, "Missing integer");
 			display_parse_state_location(state);
 			return_code = 0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"set_int_with_description.  Invalid argument(s)");
 		return_code = 0;
 	}
@@ -3192,7 +3059,7 @@ int is set to 1.
 				}
 				else
 				{
-					display_message(INFORMATION_MESSAGE," <#>[1]{integer}");
+                     print_message(INFORMATION_MESSAGE," <#>[1]{integer}");
 					return_code=1;
 				}
 			}
@@ -3204,13 +3071,13 @@ int is set to 1.
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"set_int_optional.  Missing value_address");
+             print_message(ERROR_MESSAGE,"set_int_optional.  Missing value_address");
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_int_optional.  Missing state");
+         print_message(ERROR_MESSAGE,"set_int_optional.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -3253,7 +3120,7 @@ A modifier function for setting a int to a non-negative value.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,
+                             print_message(ERROR_MESSAGE,
 								"Value must be a non-negative integer: %s\n",current_token);
 							display_parse_state_location(state);
 							return_code=0;
@@ -3261,7 +3128,7 @@ A modifier function for setting a int to a non-negative value.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid non-negative integer: %s",
+                         print_message(ERROR_MESSAGE,"Invalid non-negative integer: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -3269,33 +3136,33 @@ A modifier function for setting a int to a non-negative value.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_int_non_negative.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(int *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%d]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%d]",*value_address);
 				}
-				display_message(INFORMATION_MESSAGE,"{>=0,integer}");
+                 print_message(INFORMATION_MESSAGE,"{>=0,integer}");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing non_negative integer");
+             print_message(ERROR_MESSAGE,"Missing non_negative integer");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_int_non_negative.  Missing state");
+         print_message(ERROR_MESSAGE,"set_int_non_negative.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -3338,7 +3205,7 @@ A modifier function for setting a int to a positive value.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,
+                             print_message(ERROR_MESSAGE,
 								"Value must be a positive integer: %s\n",current_token);
 							display_parse_state_location(state);
 							return_code=0;
@@ -3346,7 +3213,7 @@ A modifier function for setting a int to a positive value.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid positive integer: %s",
+                         print_message(ERROR_MESSAGE,"Invalid positive integer: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -3354,33 +3221,33 @@ A modifier function for setting a int to a positive value.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_int_positive.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(int *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%d]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%d]",*value_address);
 				}
-				display_message(INFORMATION_MESSAGE,"{>0,integer}");
+                 print_message(INFORMATION_MESSAGE,"{>0,integer}");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing positive integer");
+             print_message(ERROR_MESSAGE,"Missing positive integer");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_int_positive.  Missing state");
+         print_message(ERROR_MESSAGE,"set_int_positive.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -3421,35 +3288,35 @@ indicate that the int has been set.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE, "Invalid int: %s", current_token);
+                     print_message(ERROR_MESSAGE, "Invalid int: %s", current_token);
 					display_parse_state_location(state);
 					return_code = 0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE, " #");
+                 print_message(INFORMATION_MESSAGE, " #");
 				if (*flag_address)
 				{
-					display_message(INFORMATION_MESSAGE, "[%d]", *value_address);
+                     print_message(INFORMATION_MESSAGE, "[%d]", *value_address);
 				}
 				else
 				{
-					display_message(INFORMATION_MESSAGE, "[NOT SET]");
+                     print_message(INFORMATION_MESSAGE, "[NOT SET]");
 				}
 				return_code = 1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE, "Missing int");
+             print_message(ERROR_MESSAGE, "Missing int");
 			display_parse_state_location(state);
 			return_code = 0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_int_and_char_flag.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_int_and_char_flag.  Invalid argument(s)");
 		return_code = 0;
 	}
 	LEAVE;
@@ -3500,14 +3367,14 @@ Now prints current contents of the vector with help.
 							}
 							else
 							{
-								display_message(ERROR_MESSAGE,"Invalid int: %s",current_token);
+                                 print_message(ERROR_MESSAGE,"Invalid int: %s",current_token);
 								display_parse_state_location(state);
 								return_code=0;
 							}
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,"Missing int vector component(s)");
+                             print_message(ERROR_MESSAGE,"Missing int vector component(s)");
 							display_parse_state_location(state);
 							return_code=0;
 						}
@@ -3521,24 +3388,24 @@ Now prints current contents of the vector with help.
 				{
 					for (comp_no=0;comp_no<number_of_components;comp_no++)
 					{
-						display_message(INFORMATION_MESSAGE," #");
+                         print_message(INFORMATION_MESSAGE," #");
 					}
-					display_message(INFORMATION_MESSAGE,"[%d",values_address[0]);
+                     print_message(INFORMATION_MESSAGE,"[%d",values_address[0]);
 					for (comp_no=1;comp_no<number_of_components;comp_no++)
 					{
-						display_message(INFORMATION_MESSAGE," %d",values_address[comp_no]);
+                         print_message(INFORMATION_MESSAGE," %d",values_address[comp_no]);
 					}
-					display_message(INFORMATION_MESSAGE,"]");
+                     print_message(INFORMATION_MESSAGE,"]");
 				}
 				else
 				{
-					display_message(INFORMATION_MESSAGE," VALUES");
+                     print_message(INFORMATION_MESSAGE," VALUES");
 				}
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"Missing %d component int vector",number_of_components);
 			display_parse_state_location(state);
 			return_code=0;
@@ -3546,7 +3413,7 @@ Now prints current contents of the vector with help.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_int_vector.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_int_vector.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -3587,7 +3454,7 @@ A modifier function for setting a float.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid float: %s",
+                         print_message(ERROR_MESSAGE,"Invalid float: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -3595,31 +3462,31 @@ A modifier function for setting a float.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"set_float.  Missing value_address");
+                     print_message(ERROR_MESSAGE,"set_float.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(float *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%g]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%g]",*value_address);
 				}
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing float");
+             print_message(ERROR_MESSAGE,"Missing float");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_float.  Missing state");
+         print_message(ERROR_MESSAGE,"set_float.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -3663,7 +3530,7 @@ indicate that the float has been set.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid float: %s",
+                         print_message(ERROR_MESSAGE,"Invalid float: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -3671,32 +3538,32 @@ indicate that the float has been set.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_float_and_char_flag.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(float *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%g]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%g]",*value_address);
 				}
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing float");
+             print_message(ERROR_MESSAGE,"Missing float");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_float_and_char_flag.  Missing state");
+         print_message(ERROR_MESSAGE,"set_float_and_char_flag.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -3738,7 +3605,7 @@ A modifier function for setting a float to a positive value.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,
+                             print_message(ERROR_MESSAGE,
 								"Value must be a positive float: %s\n",state->current_token);
 							display_parse_state_location(state);
 							return_code=0;
@@ -3746,7 +3613,7 @@ A modifier function for setting a float to a positive value.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid positive float: %s",
+                         print_message(ERROR_MESSAGE,"Invalid positive float: %s",
 							state->current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -3754,33 +3621,33 @@ A modifier function for setting a float to a positive value.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_float_positive.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(float *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%g]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%g]",*value_address);
 				}
-				display_message(INFORMATION_MESSAGE,"{>0}");
+                 print_message(INFORMATION_MESSAGE,"{>0}");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing positive float");
+             print_message(ERROR_MESSAGE,"Missing positive float");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_float_positive.  Missing state");
+         print_message(ERROR_MESSAGE,"set_float_positive.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -3822,7 +3689,7 @@ A modifier function for setting a FE_value to a positive value.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,
+                             print_message(ERROR_MESSAGE,
 								"Value must be a positive FE_value: %s\n",state->current_token);
 							display_parse_state_location(state);
 							return_code=0;
@@ -3830,7 +3697,7 @@ A modifier function for setting a FE_value to a positive value.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid positive FE_vlaue: %s",
+                         print_message(ERROR_MESSAGE,"Invalid positive FE_vlaue: %s",
 							state->current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -3838,33 +3705,33 @@ A modifier function for setting a FE_value to a positive value.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_FE_value_positive.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(FE_value *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%g]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%g]",*value_address);
 				}
-				display_message(INFORMATION_MESSAGE,"{>0}");
+                 print_message(INFORMATION_MESSAGE,"{>0}");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing positive FE_value");
+             print_message(ERROR_MESSAGE,"Missing positive FE_value");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_FE_value_positive.  Missing state");
+         print_message(ERROR_MESSAGE,"set_FE_value_positive.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -3908,7 +3775,7 @@ A modifier function for setting a float to a non_negative value.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,
+                             print_message(ERROR_MESSAGE,
 								"Value must be a non_negative float: %s\n",current_token);
 							display_parse_state_location(state);
 							return_code=0;
@@ -3916,7 +3783,7 @@ A modifier function for setting a float to a non_negative value.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid non-negative float: %s",
+                         print_message(ERROR_MESSAGE,"Invalid non-negative float: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -3924,33 +3791,33 @@ A modifier function for setting a float to a non_negative value.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_float_non_negative.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(float *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%g]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%g]",*value_address);
 				}
-				display_message(INFORMATION_MESSAGE,"{>=0}");
+                 print_message(INFORMATION_MESSAGE,"{>=0}");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing non-negative float");
+             print_message(ERROR_MESSAGE,"Missing non-negative float");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_float_non_negative.  Missing state");
+         print_message(ERROR_MESSAGE,"set_float_non_negative.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -3994,7 +3861,7 @@ A modifier function for setting a float to a value in [0,1].
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,"Value must be a 0<=float<=1: %s\n",
+                             print_message(ERROR_MESSAGE,"Value must be a 0<=float<=1: %s\n",
 								current_token);
 							display_parse_state_location(state);
 							return_code=0;
@@ -4002,7 +3869,7 @@ A modifier function for setting a float to a value in [0,1].
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid 0<=float<=1: %s",
+                         print_message(ERROR_MESSAGE,"Invalid 0<=float<=1: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -4010,33 +3877,33 @@ A modifier function for setting a float to a value in [0,1].
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_float_0_to_1_inclusive.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(float *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%g]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%g]",*value_address);
 				}
-				display_message(INFORMATION_MESSAGE,"{>=0,<=1}");
+                 print_message(INFORMATION_MESSAGE,"{>=0,<=1}");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing 0<=float<=1");
+             print_message(ERROR_MESSAGE,"Missing 0<=float<=1");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_float_0_to_1_inclusive.  Missing state");
+         print_message(ERROR_MESSAGE,"set_float_0_to_1_inclusive.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -4077,7 +3944,7 @@ A modifier function for setting a double.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid double: %s",
+                         print_message(ERROR_MESSAGE,"Invalid double: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -4085,31 +3952,31 @@ A modifier function for setting a double.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"set_double.  Missing value_address");
+                     print_message(ERROR_MESSAGE,"set_double.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(double *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%g]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%g]",*value_address);
 				}
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing double");
+             print_message(ERROR_MESSAGE,"Missing double");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_double.  Missing state");
+         print_message(ERROR_MESSAGE,"set_double.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -4155,7 +4022,7 @@ indicate that the double has been set.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid double: %s",
+                         print_message(ERROR_MESSAGE,"Invalid double: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -4163,32 +4030,32 @@ indicate that the double has been set.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_double_and_char_flag.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(double *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%g]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%g]",*value_address);
 				}
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing double");
+             print_message(ERROR_MESSAGE,"Missing double");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_double_and_char_flag.  Missing state");
+         print_message(ERROR_MESSAGE,"set_double_and_char_flag.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -4223,33 +4090,33 @@ int set_double_non_negative(struct Parse_state *state, void *value_address_void,
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"Value must be a non_negative double: %s\n", current_token);
 						display_parse_state_location(state);
 					}
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE, "Invalid non-negative double: %s",
+                     print_message(ERROR_MESSAGE, "Invalid non-negative double: %s",
 						current_token);
 					display_parse_state_location(state);
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #[%lg]{>=0}", *value_address);
+                 print_message(INFORMATION_MESSAGE," #[%lg]{>=0}", *value_address);
 				return_code = 1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing non-negative double");
+             print_message(ERROR_MESSAGE,"Missing non-negative double");
 			display_parse_state_location(state);
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_double_non_negative.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_double_non_negative.  Invalid argument(s)");
 	}
 	return (return_code);
 }
@@ -4281,33 +4148,33 @@ int set_double_positive(struct Parse_state *state, void *value_address_void,
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"Value must be a positive double: %s\n", current_token);
 						display_parse_state_location(state);
 					}
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE, "Invalid positive double: %s",
+                     print_message(ERROR_MESSAGE, "Invalid positive double: %s",
 						current_token);
 					display_parse_state_location(state);
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #[%lg]{>0}", *value_address);
+                 print_message(INFORMATION_MESSAGE," #[%lg]{>0}", *value_address);
 				return_code = 1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing positive double");
+             print_message(ERROR_MESSAGE,"Missing positive double");
 			display_parse_state_location(state);
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_double_positive.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_double_positive.  Invalid argument(s)");
 	}
 	return (return_code);
 }
@@ -4352,33 +4219,33 @@ int set_double_product(struct Parse_state *state, void *values_void,
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE, " #");
+                 print_message(INFORMATION_MESSAGE, " #");
 				for (int i = 1; i < valuesCount; ++i)
 				{
-					display_message(INFORMATION_MESSAGE, "*#");
+                     print_message(INFORMATION_MESSAGE, "*#");
 				}
-				display_message(INFORMATION_MESSAGE, "[");
+                 print_message(INFORMATION_MESSAGE, "[");
 				for (int i = 0; i < valuesCount; ++i)
 				{
 					if (i)
 					{
-						display_message(INFORMATION_MESSAGE, "*");
+                         print_message(INFORMATION_MESSAGE, "*");
 					}
-					display_message(INFORMATION_MESSAGE, "%g", values[i]);
+                     print_message(INFORMATION_MESSAGE, "%g", values[i]);
 				}
-				display_message(INFORMATION_MESSAGE, "]");
+                 print_message(INFORMATION_MESSAGE, "]");
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing values");
+             print_message(ERROR_MESSAGE,"Missing values");
 			display_parse_state_location(state);
 			return_code = 0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_double_product.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_double_product.  Invalid argument(s)");
 		return_code = 0;
 	}
 	return (return_code);
@@ -4427,7 +4294,7 @@ Now prints current contents of the vector with help.
 							}
 							else
 							{
-								display_message(ERROR_MESSAGE,"Invalid float: %s",
+                                 print_message(ERROR_MESSAGE,"Invalid float: %s",
 									current_token);
 								display_parse_state_location(state);
 								return_code=0;
@@ -4435,7 +4302,7 @@ Now prints current contents of the vector with help.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,
+                             print_message(ERROR_MESSAGE,
 								"Missing float vector component(s)");
 							display_parse_state_location(state);
 							return_code=0;
@@ -4447,19 +4314,19 @@ Now prints current contents of the vector with help.
 					/* write help text */
 					for (comp_no=0;comp_no<number_of_components;comp_no++)
 					{
-						display_message(INFORMATION_MESSAGE," #");
+                         print_message(INFORMATION_MESSAGE," #");
 					}
-					display_message(INFORMATION_MESSAGE,"[%g",values_address[0]);
+                     print_message(INFORMATION_MESSAGE,"[%g",values_address[0]);
 					for (comp_no=1;comp_no<number_of_components;comp_no++)
 					{
-						display_message(INFORMATION_MESSAGE," %g",values_address[comp_no]);
+                         print_message(INFORMATION_MESSAGE," %g",values_address[comp_no]);
 					}
-					display_message(INFORMATION_MESSAGE,"]");
+                     print_message(INFORMATION_MESSAGE,"]");
 				}
 			}
 			else
 			{
-				display_message(ERROR_MESSAGE,
+                 print_message(ERROR_MESSAGE,
 					"Missing %d component float vector",number_of_components);
 				display_parse_state_location(state);
 				return_code=0;
@@ -4467,13 +4334,13 @@ Now prints current contents of the vector with help.
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"set_float_vector.  Invalid argument(s)");
+             print_message(ERROR_MESSAGE,"set_float_vector.  Invalid argument(s)");
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_float_vector.  Missing state");
+         print_message(ERROR_MESSAGE,"set_float_vector.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -4514,7 +4381,7 @@ A modifier function for setting a float.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Invalid fe value: %s",
+                         print_message(ERROR_MESSAGE,"Invalid fe value: %s",
 							current_token);
 						display_parse_state_location(state);
 						return_code=0;
@@ -4522,31 +4389,31 @@ A modifier function for setting a float.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"set_FE_value.  Missing value_address");
+                     print_message(ERROR_MESSAGE,"set_FE_value.  Missing value_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #");
+                 print_message(INFORMATION_MESSAGE," #");
 				value_address=(FE_value *)value_address_void;
 				if (value_address != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%g]",*value_address);
+                     print_message(INFORMATION_MESSAGE,"[%g]",*value_address);
 				}
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing FE_value");
+             print_message(ERROR_MESSAGE,"Missing FE_value");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_FE_value.  Missing state");
+         print_message(ERROR_MESSAGE,"set_FE_value.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -4599,7 +4466,7 @@ Now prints current contents of the vector with help.
 							}
 							else
 							{
-								display_message(ERROR_MESSAGE, "Invalid FE_value: %s",
+                                 print_message(ERROR_MESSAGE, "Invalid FE_value: %s",
 									current_token);
 								display_parse_state_location(state);
 								return_code = 0;
@@ -4607,7 +4474,7 @@ Now prints current contents of the vector with help.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,
+                             print_message(ERROR_MESSAGE,
 								"Missing FE_value vector component(s)");
 							display_parse_state_location(state);
 							return_code = 0;
@@ -4616,7 +4483,7 @@ Now prints current contents of the vector with help.
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_FE_value_array.  Invalid array or number_of_components");
 					return_code = 0;
 				}
@@ -4628,31 +4495,31 @@ Now prints current contents of the vector with help.
 					/* write help text */
 					for (i = 0; i < number_of_components; i++)
 					{
-						display_message(INFORMATION_MESSAGE," #");
+                         print_message(INFORMATION_MESSAGE," #");
 					}
-					display_message(INFORMATION_MESSAGE, "[%g", values[0]);
+                     print_message(INFORMATION_MESSAGE, "[%g", values[0]);
 					for (i = 1; i < number_of_components; i++)
 					{
-						display_message(INFORMATION_MESSAGE, " %g", values[i]);
+                         print_message(INFORMATION_MESSAGE, " %g", values[i]);
 					}
-					display_message(INFORMATION_MESSAGE, "]");
+                     print_message(INFORMATION_MESSAGE, "]");
 				}
 				else
 				{
-					display_message(INFORMATION_MESSAGE," VALUES");
+                     print_message(INFORMATION_MESSAGE," VALUES");
 				}
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE, "Missing values");
+             print_message(ERROR_MESSAGE, "Missing values");
 			display_parse_state_location(state);
 			return_code = 0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE, "set_FE_value_array.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE, "set_FE_value_array.  Invalid argument(s)");
 		return_code = 0;
 	}
 	LEAVE;
@@ -4703,7 +4570,7 @@ Now prints current contents of the vector with help.
 							}
 							else
 							{
-								display_message(ERROR_MESSAGE,"Invalid double: %s",
+                                 print_message(ERROR_MESSAGE,"Invalid double: %s",
 									current_token);
 								display_parse_state_location(state);
 								return_code=0;
@@ -4711,7 +4578,7 @@ Now prints current contents of the vector with help.
 						}
 						else
 						{
-							display_message(ERROR_MESSAGE,
+                             print_message(ERROR_MESSAGE,
 							  "Missing double vector component(s)");
 							display_parse_state_location(state);
 							return_code=0;
@@ -4726,24 +4593,24 @@ Now prints current contents of the vector with help.
 				{
 					for (comp_no=0;comp_no<number_of_components;comp_no++)
 					{
-						display_message(INFORMATION_MESSAGE," #");
+                         print_message(INFORMATION_MESSAGE," #");
 					}
-					display_message(INFORMATION_MESSAGE,"[%g",values_address[0]);
+                     print_message(INFORMATION_MESSAGE,"[%g",values_address[0]);
 					for (comp_no=1;comp_no<number_of_components;comp_no++)
 					{
-						display_message(INFORMATION_MESSAGE," %g",values_address[comp_no]);
+                         print_message(INFORMATION_MESSAGE," %g",values_address[comp_no]);
 					}
-					display_message(INFORMATION_MESSAGE,"]");
+                     print_message(INFORMATION_MESSAGE,"]");
 				}
 				else
 				{
-					display_message(INFORMATION_MESSAGE," VALUES");
+                     print_message(INFORMATION_MESSAGE," VALUES");
 				}
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"Missing %d component double vector",number_of_components);
 			display_parse_state_location(state);
 			return_code=0;
@@ -4751,7 +4618,7 @@ Now prints current contents of the vector with help.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_double_vector.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_double_vector.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -4800,7 +4667,7 @@ number_of_components floats.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE, "set_variable_length_double_vector.  "
+                         print_message(ERROR_MESSAGE, "set_variable_length_double_vector.  "
 							"Unable to allocate memory.");
 						return_code=0;
 					}
@@ -4849,7 +4716,7 @@ number_of_components floats.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"No valid double vector component(s) found.");
 						display_parse_state_location(state);
 						return_code=0;
@@ -4858,26 +4725,26 @@ number_of_components floats.
 				else
 				{
 					/* write help text */
-					display_message(INFORMATION_MESSAGE," #..#");
+                     print_message(INFORMATION_MESSAGE," #..#");
 				}
 			}
 			else
 			{
-				display_message(ERROR_MESSAGE, "Missing double vector");
+                 print_message(ERROR_MESSAGE, "Missing double vector");
 				display_parse_state_location(state);
 				return_code=0;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"set_variable_length_double_vector.  "
+             print_message(ERROR_MESSAGE,"set_variable_length_double_vector.  "
 				"Invalid argument(s)");
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_variable_length_double_vector.  "
+         print_message(ERROR_MESSAGE,"set_variable_length_double_vector.  "
 			"Missing state");
 		return_code=0;
 	}
@@ -4929,26 +4796,26 @@ may not be initialised (calling function could put them in the help text).
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,"Missing vector component(s)");
+                         print_message(ERROR_MESSAGE,"Missing vector component(s)");
 						return_code=0;
 					}
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE,set_vector_data->help_text);
+                 print_message(INFORMATION_MESSAGE,set_vector_data->help_text);
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing%s",set_vector_data->help_text);
+             print_message(ERROR_MESSAGE,"Missing%s",set_vector_data->help_text);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"set_double_vector_with_help.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -4981,13 +4848,13 @@ A modifier function for setting a character flag to 1.
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"set_char_flag.  Missing value_address");
+             print_message(ERROR_MESSAGE,"set_char_flag.  Missing value_address");
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_char_flag.  Missing state");
+         print_message(ERROR_MESSAGE,"set_char_flag.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -5019,13 +4886,13 @@ A modifier function for setting a character flag to 0.
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"unset_char_flag.  Missing value_address");
+             print_message(ERROR_MESSAGE,"unset_char_flag.  Missing value_address");
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"unset_char_flag.  Missing state");
+         print_message(ERROR_MESSAGE,"unset_char_flag.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -5066,11 +4933,11 @@ If the option's <token> is supplied and its value is currently set, it
 				token = (char *)token_void;
 				if (token != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%s]",token);
+                     print_message(INFORMATION_MESSAGE,"[%s]",token);
 				}
 				else
 				{
-					display_message(INFORMATION_MESSAGE,"[CURRENT]");
+                     print_message(INFORMATION_MESSAGE,"[CURRENT]");
 				}
 			}
 			return_code=0;
@@ -5078,7 +4945,7 @@ If the option's <token> is supplied and its value is currently set, it
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_int_switch.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_int_switch.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -5119,11 +4986,11 @@ If the option's <token> is supplied and its value is currently set, it
 				token = (char *)token_void;
 				if (token != NULL)
 				{
-					display_message(INFORMATION_MESSAGE,"[%s]",token);
+                     print_message(INFORMATION_MESSAGE,"[%s]",token);
 				}
 				else
 				{
-					display_message(INFORMATION_MESSAGE,"[CURRENT]");
+                     print_message(INFORMATION_MESSAGE,"[CURRENT]");
 				}
 			}
 			return_code=0;
@@ -5131,7 +4998,7 @@ If the option's <token> is supplied and its value is currently set, it
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"unset_int_switch.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"unset_int_switch.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -5194,38 +5061,38 @@ memory for the file name string.
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"set_file_name.  Could not allocate memory for name");
 						return_code=0;
 					}
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_file_name.  Missing name_address");
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," FILE_NAME");
+                 print_message(INFORMATION_MESSAGE," FILE_NAME");
 				if ((name_address=(char **)name_address_void)&&(*name_address))
 				{
-					display_message(INFORMATION_MESSAGE,"[%s]",*name_address);
+                     print_message(INFORMATION_MESSAGE,"[%s]",*name_address);
 				}
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing file name");
+             print_message(ERROR_MESSAGE,"Missing file name");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_file_name.  Missing state");
+         print_message(ERROR_MESSAGE,"set_file_name.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -5335,7 +5202,7 @@ of two forms - # or #..#
 								}
 								else
 								{
-									display_message(ERROR_MESSAGE,
+                                     print_message(ERROR_MESSAGE,
 										"set_integer_range.  Could not reallocate integer_range");
 									return_code=0;
 								}
@@ -5352,7 +5219,7 @@ of two forms - # or #..#
 							}
 							else
 							{
-								display_message(ERROR_MESSAGE,
+                                 print_message(ERROR_MESSAGE,
 									"set_integer_range.  Could not reallocate integer_range");
 								return_code=0;
 							}
@@ -5364,34 +5231,34 @@ of two forms - # or #..#
 					}
 					else
 					{
-						display_message(ERROR_MESSAGE,
+                         print_message(ERROR_MESSAGE,
 							"set_integer_range.  Missing integer_range_address");
 						return_code=0;
 					}
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,"Invalid integer range");
+                     print_message(ERROR_MESSAGE,"Invalid integer range");
 					display_parse_state_location(state);
 					return_code=0;
 				}
 			}
 			else
 			{
-				display_message(INFORMATION_MESSAGE," #|#..#");
+                 print_message(INFORMATION_MESSAGE," #|#..#");
 				return_code=1;
 			}
 		}
 		else
 		{
-			display_message(ERROR_MESSAGE,"Missing integer range");
+             print_message(ERROR_MESSAGE,"Missing integer range");
 			display_parse_state_location(state);
 			return_code=0;
 		}
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_integer_range.  Missing state");
+         print_message(ERROR_MESSAGE,"set_integer_range.  Missing state");
 		return_code=0;
 	}
 	LEAVE;
@@ -5423,7 +5290,7 @@ NB.  *enum_value_address_void is put in *set_value_address_void
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,"set_enum.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE,"set_enum.  Invalid argument(s)");
 		return_code=0;
 	}
 	LEAVE;
@@ -5451,7 +5318,7 @@ then the <flag> will be set.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_char_flag_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5473,7 +5340,7 @@ int Option_table_add_unset_char_flag_entry(struct Option_table *option_table,
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_unset_char_flag_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5502,7 +5369,7 @@ the token following is assigned to <value>.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_int_positive_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5531,7 +5398,7 @@ the token following is assigned to <value>.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_int_non_negative_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5562,7 +5429,7 @@ help mode is entered.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_int_vector_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5591,7 +5458,7 @@ the token following is assigned to <value>.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_float_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5622,7 +5489,7 @@ help mode is entered.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_float_vector_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5653,7 +5520,7 @@ help mode is entered.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_FE_value_vector_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5673,7 +5540,7 @@ int Option_table_add_double_entry(struct Option_table *option_table,
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_double_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5691,7 +5558,7 @@ int Option_table_add_non_negative_double_entry(struct Option_table *option_table
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_non_negative_double_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5709,7 +5576,7 @@ int Option_table_add_positive_double_entry(struct Option_table *option_table,
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_positive_double_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5736,7 +5603,7 @@ Adds the given <token> to the <option_table>.  The <vector> is filled in with th
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_double_vector_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5766,7 +5633,7 @@ Adds the given <token> to the <option_table>.  The <vector> is filled in with th
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_variable_length_double_vector_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5796,7 +5663,7 @@ number of values specified in the <data>.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_double_vector_with_help_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5826,7 +5693,7 @@ a default option.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_name_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5864,7 +5731,7 @@ are not repeated.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_names_from_list_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5909,7 +5776,7 @@ int ignore_entry(struct Parse_state *state,void *dummy_to_be_modified,
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE, "ignore_entry, no state.");
+         print_message(ERROR_MESSAGE, "ignore_entry, no state.");
 	}
 
 	return return_code;
@@ -5936,7 +5803,7 @@ the <token>.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_ignore_token_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -5956,7 +5823,7 @@ int Option_table_add_double_product_entry(struct Option_table *option_table,
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_double_product_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -6002,7 +5869,7 @@ that do not match other options.  This option must be added last.
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_ignore_all_unmatched_entries.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -6024,7 +5891,7 @@ int Option_table_add_string_entry(struct Option_table *option_table,
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_string_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -6043,7 +5910,7 @@ int Option_table_add_default_string_entry(struct Option_table *option_table,
 	{
 		if (*string_address)
 		{
-			display_message(ERROR_MESSAGE,
+             print_message(ERROR_MESSAGE,
 				"Option_table_add_default_string_entry.  String must initially be NULL");
 			Option_table_set_invalid(option_table);
 			return_code = 0;
@@ -6056,7 +5923,7 @@ int Option_table_add_default_string_entry(struct Option_table *option_table,
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_default_string_entry.  Invalid argument(s)");
 		return_code=0;
 	}
@@ -6101,14 +5968,14 @@ int set_multiple_strings(struct Parse_state *state,void *multiple_strings_addres
 		return_code = 1;
 		if (Parse_state_help_mode(state))
 		{
-			display_message(INFORMATION_MESSAGE, " %s", (char *)strings_description_void);
+             print_message(INFORMATION_MESSAGE, " %s", (char *)strings_description_void);
 			return return_code;
 		}
 		while (true)
 		{
 			if (0 == state->current_token)
 			{
-				display_message(ERROR_MESSAGE, "Missing string");
+                 print_message(ERROR_MESSAGE, "Missing string");
 				display_parse_state_location(state);
 				return_code = 0;
 				break;
@@ -6124,7 +5991,7 @@ int set_multiple_strings(struct Parse_state *state,void *multiple_strings_addres
 				}
 				else
 				{
-					display_message(ERROR_MESSAGE,
+                     print_message(ERROR_MESSAGE,
 						"set_multiple_strings.  Could not allocate memory for string");
 					return_code = 0;
 					break;
@@ -6132,7 +5999,7 @@ int set_multiple_strings(struct Parse_state *state,void *multiple_strings_addres
 			}
 			else
 			{
-				display_message(ERROR_MESSAGE,
+                 print_message(ERROR_MESSAGE,
 					"set_multiple_strings.  Could not reallocate string array");
 				return_code = 0;
 				break;
@@ -6146,7 +6013,7 @@ int set_multiple_strings(struct Parse_state *state,void *multiple_strings_addres
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE, "set_multiple_strings.  Invalid argument(s)");
+         print_message(ERROR_MESSAGE, "set_multiple_strings.  Invalid argument(s)");
 		return_code = 0;
 	}
 	LEAVE;
@@ -6168,7 +6035,7 @@ int Option_table_add_multiple_strings_entry(struct Option_table *option_table,
 	}
 	else
 	{
-		display_message(ERROR_MESSAGE,
+         print_message(ERROR_MESSAGE,
 			"Option_table_add_multiple_strings_entry.  Invalid argument(s)");
 		return_code=0;
 	}

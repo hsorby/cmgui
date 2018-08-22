@@ -48,7 +48,7 @@ endif ()
 # Find our friendly Zinc CMake config file.
 # We can only use the static version of the library for the Cmgui application
 set(ZINC_USE_STATIC TRUE)
-set(REQUIRE_INTERNAL_ZINC_INCLUDE_DIR TRUE)
+#set(REQUIRE_INTERNAL_ZINC_INCLUDE_DIR TRUE)
 find_package(Zinc REQUIRED)
 find_package(cmiss_perl_interpreter ${CMISS_PERL_INTERPRETER_FIND_FLAG})
 find_package(Qt5 COMPONENTS Core Gui Widgets OpenGL UiTools REQUIRED)
@@ -57,9 +57,9 @@ find_package(Git QUIET)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-add_subdirectory(source)
+add_subdirectory(src)
 
-set(QRC_RESOURCES source/user_interface/qt/ui_files.qrc)
+set(QRC_RESOURCES src/command/qt/ui_files.qrc)
 
 if (WIN32)
     set(WIN32_SYSTEM TRUE )
@@ -69,11 +69,11 @@ if (MSVC)
     set(EXTRA_COMPILER_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
 endif ()
 
-include(source/cmake/app_srcs.cmake)
-include(source/cmake/app_hdrs.cmake)
+include(cmgui_sources_list.cmake)
+include(cmgui_headers_list.cmake)
 
 if (APPLE)
-    set(OSX_ICON source/icon/cmiss_torso.icns)
+    set(OSX_ICON src/icons/cmiss_torso.icns)
     set_source_files_properties(${OSX_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
 endif ()
 
@@ -88,7 +88,7 @@ set(CMGUI_BUILD_INFORMATION "\"${CMGUI_SYSTEM_NAME}\"")
 set(CMGUI_VERSION_STAGING_HDR "${PROJECT_BINARY_DIR}/CMakeFiles/cmgui_version.staged.h")
 
 # We want the version header to be configured at compile time and not just configure time.
-set(CMGUI_VERSION_HDR ${CMAKE_CURRENT_BINARY_DIR}/source/configure/cmgui_version.h)
+set(CMGUI_VERSION_HDR ${CMAKE_CURRENT_BINARY_DIR}/src/configure/cmgui_version.h)
 
 if (CMAKE_CONFIGURATION_TYPES)
     set(CONFIGURE_BUILD_TYPE $<CONFIG>)
@@ -111,19 +111,28 @@ add_custom_target(generate_version_file
 set_source_files_properties(${CMGUI_VERSION_HDR} PROPERTIES GENERATED TRUE SKIP_AUTOMOC ON)
 list(APPEND FILES_FOR_CLEANING ${CMGUI_VERSION_HDR})
 
-set(CMGUI_CONFIGURE_HDR ${PROJECT_BINARY_DIR}/source/configure/cmgui_configure.h)
-configure_file(${PROJECT_SOURCE_DIR}/source/configure/cmgui_configure.h.cmake ${CMGUI_CONFIGURE_HDR})
+set(PROJECT_INCLUDE_DIR ${PROJECT_BINARY_DIR}/src)
+set(CMGUI_CONFIGURE_HDR ${PROJECT_INCLUDE_DIR}/configure/cmgui_configure.h)
+configure_file(${PROJECT_SOURCE_DIR}/src/configure/cmgui_configure.h.cmake ${CMGUI_CONFIGURE_HDR})
+
+set(DEFINITIONS_FOR_CMGUI FE_value)
 
 set(CMGUI_TARGET cmgui)
-add_executable(${CMGUI_TARGET} WIN32 MACOSX_BUNDLE ${APP_SRCS} ${OSX_ICON} ${QRC_RESOURCES})
+add_executable(${CMGUI_TARGET} WIN32 MACOSX_BUNDLE ${CMGUI_SRCS} ${OSX_ICON} ${QRC_RESOURCES})
 add_dependencies(${CMGUI_TARGET} generate_version_file)
 
 set_target_properties(${CMGUI_TARGET} PROPERTIES DEBUG_POSTFIX "d")
-target_link_libraries(${CMGUI_TARGET} PRIVATE graphics_qt command_qt zinc-static ${CMISS_PERL_INTERPRETER_LIBRARIES} Qt5::Widgets Qt5::UiTools)
-target_include_directories(${CMGUI_TARGET} PRIVATE "${PROJECT_SOURCE_DIR}/source" "${PROJECT_BINARY_DIR}/source" ${CMISS_PERL_INTERPRETER_INCLUDE_DIRS})
-target_compile_definitions(${CMGUI_TARGET} PRIVATE USE_CMGUI_GRAPHICS_WINDOW ${DEFINITIONS_FOR_PERL_INTERPRETER})
+target_link_libraries(${CMGUI_TARGET} PRIVATE cmgui_model graphics_qt command_qt zinc-static ${CMISS_PERL_INTERPRETER_LIBRARIES} Qt5::Widgets Qt5::UiTools)
+target_include_directories(${CMGUI_TARGET} PRIVATE "${PROJECT_SOURCE_DIR}/src" ${PROJECT_INCLUDE_DIR} ${CMISS_PERL_INTERPRETER_INCLUDE_DIRS})
+target_compile_definitions(${CMGUI_TARGET} PRIVATE ${DEFINITIONS_FOR_CMGUI} ${DEFINITIONS_FOR_PERL_INTERPRETER})
 
-add_custom_target(headers SOURCES ${APP_HDRS} ${CMGUI_CONFIGURE_HDR} ${CMGUI_VERSION_HDR})
+# I will want to remove these next three lines at some point.
+include(source/cmake/app_srcs.cmake)
+include(source/cmake/app_hdrs.cmake)
+add_custom_target(cmgui_old SOURCES ${APP_SRCS} ${APP_HDRS})
+
+add_custom_target(cmgui_headers SOURCES ${CMGUI_HDRS} ${CMGUI_CONFIGURE_HDR} ${CMGUI_VERSION_HDR})
+
 # Additional clean files
 set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${FILES_FOR_CLEANING}")
 

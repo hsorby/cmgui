@@ -114,9 +114,9 @@ SET(APP_HDRS
     source/user_interface/fd_io.h
     source/user_interface/filedir.h
     source/user_interface/idle.h
-    source/user_interface/main_window.h
+#    source/user_interface/main_window.h
     source/user_interface/process_list_or_write_command.hpp
     source/user_interface/user_interface.h
-    source/utilities/qt_ui.h
-    source/utilities/qt_metatypes.h
+#    source/utilities/qt_ui.h
+#    source/utilities/qt_metatypes.h
 )

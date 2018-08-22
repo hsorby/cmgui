@@ -13,6 +13,8 @@ DESCRIPTION :
 /*SAB I have concatenated the correct version file for each version
   externally in the shell with cat #include "version.h"*/
 
+#include "cmgui.h"
+
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QCommandLineOption>
@@ -23,11 +25,8 @@ DESCRIPTION :
 #include "configure/cmgui_configure.h"
 #include "configure/cmgui_version.h"
 
-#include "context/context_app.h"
-#include "command/cmiss.h"
-#include "context/context_app.h"
-#include "context/user_interface_module.h"
-#include "user_interface/main_window.h"
+#include "command/cmgui_command_window.h"
+#include "command/cmgui_command_model.h"
 
 /*
 Global functions
@@ -91,7 +90,7 @@ CommandLineParseResult parseCommandLine(QCommandLineParser &parser, const QStrin
     return CommandLineOk;
 }
 
-QCoreApplication* createApplication(int &argc, char *argv[], CommandLineParseResult &status)
+QCoreApplication* createApplication(int &argc, char *argv[], ApplicationOptions &applicationOptions, CommandLineParseResult &status)
 {
     QStringList arguments;
     for (int a = 0; a < argc; ++a) {
@@ -102,6 +101,9 @@ QCoreApplication* createApplication(int &argc, char *argv[], CommandLineParseRes
     // A boolean option for running Cmgui sans GUI (--sans-gui)
     const QCommandLineOption sansGuiOption(QStringList() << "s" << "sans-gui", "Run Cmgui sans GUI.");
     parser.addOption(sansGuiOption);
+
+    const QCommandLineOption commandFileOption(QStringList() << "f" << "command-file", "Command file name to load.");
+    parser.addOption(commandFileOption);
 
     QString errorMessage;
     status = parseCommandLine(parser, arguments, &errorMessage);
@@ -130,6 +132,10 @@ QCoreApplication* createApplication(int &argc, char *argv[], CommandLineParseRes
 
     switch (status) {
     case CommandLineOk:
+        applicationOptions.name = arguments.at(0);
+        if (parser.isSet(commandFileOption)) {
+            applicationOptions.commandFile = parser.value(commandFileOption);
+        }
         break;
     case CommandLineError:
         qCritical() << errorMessage;
@@ -144,15 +150,19 @@ QCoreApplication* createApplication(int &argc, char *argv[], CommandLineParseRes
 }
 
 /**
- * Main program for the CMISS Graphical User Interface CMGUI
+ * Main program for the CMISS Graphical User Interface Cmgui
  */
 int main(int argc, char *argv[])
 {
     CommandLineParseResult status = CommandLineOk;
-    QScopedPointer<QCoreApplication> application(createApplication(argc, argv, status));
-    QScopedPointer<MainWindow> mainWindow(nullptr);
+    ApplicationOptions applicationOptions;
+    QScopedPointer<QCoreApplication> application(createApplication(argc, argv, applicationOptions, status));
+
+    QSharedPointer<CmguiCommandModel>  mainModel(new CmguiCommandModel(applicationOptions));
+    QScopedPointer<CmguiCommandWindow> mainWindow(nullptr);
     if (qobject_cast<QApplication *>(application.data())) {
-       mainWindow.reset(new MainWindow());
+       mainWindow.reset(new CmguiCommandWindow());
+       mainWindow->setModel(mainModel);
        mainWindow->show();
     } else {
         switch (status) {
